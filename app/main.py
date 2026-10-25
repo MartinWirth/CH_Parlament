@@ -400,24 +400,39 @@ def configured_party_profiles(member_rows):
 async def party_profile_links(member_rows):
     sources, diagnostic = configured_party_profiles(member_rows)
     if not sources:
+        diagnostic["pages"] = []
         return {}, diagnostic
     semaphore = asyncio.Semaphore(8)
-    async with httpx.AsyncClient(timeout=5, trust_env=False, headers={"User-Agent": "CH-Parlament/1.0"}) as client:
-        results = await asyncio.gather(*(scan_homepage(client, url, semaphore) for url in sources.values()))
-    save_homepage_cache()
-    # A party page may contain shared organisation accounts in its footer.
-    # Only accept profile handles containing the person's surname; this is
-    # deliberately conservative and may miss legitimate pseudonyms.
     members = {str(pick(row, "PersonNumber")): normalize(row)["name"] for row in member_rows if is_current(row)}
     def ascii_key(value):
         return "".join(ch for ch in unicodedata.normalize("NFKD", value.casefold()) if ch.isascii() and ch.isalnum())
+    async with httpx.AsyncClient(timeout=5, trust_env=False, headers={"User-Agent": "CH-Parlament/1.0"}) as client:
+        results = await asyncio.gather(*(scan_homepage(client, url, semaphore) for url in sources.values()))
+    save_homepage_cache()
     verified = {}
-    for number, links in zip(sources, results):
+    pages = []
+    for (number, page_url), links in zip(sources.items(), results):
         surname = ascii_key(members[number].split()[-1])
-        personal = {platform: link for platform, link in links.items() if surname and surname in ascii_key(urlparse(link).path)}
-        if personal:
-            verified[number] = personal
+        accepted = {}
+        rejected = {}
+        for platform, link in links.items():
+            if surname and surname in ascii_key(urlparse(link).path):
+                accepted[platform] = link
+            else:
+                rejected[platform] = {"url": link, "reason": "Nachname fehlt im Profilpfad"}
+        if accepted:
+            verified[number] = accepted
+        pages.append({
+            "person_number": number,
+            "name": members[number],
+            "profile_url": page_url,
+            "found_links": len(links),
+            "accepted": accepted,
+            "rejected": rejected,
+            "note": "Keine Links gefunden: Seite nicht erreichbar, kein HTML, Cache leer oder keine Social-Links" if not links else None,
+        })
     diagnostic["matched_personal_handles"] = len(verified)
+    diagnostic["pages"] = pages
     return verified, diagnostic
 
 
