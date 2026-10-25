@@ -362,12 +362,12 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
         if diagnostic is not None:
             diagnostic.update({"status": "pending", "http_status": None, "final_url": url, "redirects": [], "cache_hit": bool(cached and now - cached[0] < _homepage_cache_ttl)})
         try:
-            original = urlparse(url)
+            current = canonical_homepage_url(url)
+            original = urlparse(current)
             if not await asyncio.to_thread(public_hostname, original.hostname):
                 if diagnostic is not None:
                     diagnostic["status"] = "hostname_not_public"
                 return found
-            current = canonical_homepage_url(url)
             for _ in range(3):
                 response = None
                 for attempt in range(2):
@@ -390,8 +390,9 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                                 diagnostic["status"] = "redirect_invalid_location"
                             return found
                         try:
-                            target = canonical_homepage_url(urljoin(current, location))
-                        except ValueError as exc:
+                            joined = urljoin(current, location)
+                            target = canonical_homepage_url(joined)
+                        except (ValueError, UnicodeError) as exc:
                             if diagnostic is not None:
                                 diagnostic["status"] = "redirect_invalid_location"
                                 diagnostic["error_detail"] = str(exc)[:240]
