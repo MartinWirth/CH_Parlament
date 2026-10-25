@@ -817,7 +817,21 @@ async def discover_other_party_profiles(member_rows):
                         candidates = [number for number, name in members.get(group, []) if key(name) == path_key]
                         if len(candidates) == 1:
                             matches[candidates[0]] = url.split("?", 1)[0].split("#", 1)[0]
-                    discovered.update(matches)
+                    # Preserve verified FDP modal URLs including query parameters.
+                    # Exact full-name matches were established from roster labels.
+                    if group == "FDP":
+                        modal_matches = {
+                            number: url for number, url in matches.items()
+                            if parse_qs(urlparse(url).query).get("tx_wngfeusers_members[action]") == ["showModal"]
+                        }
+                        report["modal_sources"] = len(modal_matches)
+                        for number, modal_url in modal_matches.items():
+                            discovered.setdefault(number, modal_url)
+                        for number, profile_url in matches.items():
+                            if number not in modal_matches:
+                                discovered[number] = profile_url
+                    else:
+                        discovered.update(matches)
                     report.update({"status": "parsed", "matched": len(matches), "links": len(parser.links)})
                     if group == "FDP":
                         report["profile_url_samples"] = fdp_profile_samples
