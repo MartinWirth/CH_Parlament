@@ -3,6 +3,7 @@ from pathlib import Path
 import os
 import logging
 import time
+import xml.etree.ElementTree as ET
 from urllib.parse import urlparse
 import httpx
 from fastapi import FastAPI, HTTPException, Query
@@ -165,3 +166,32 @@ async def members(language: str = Query("DE", pattern="^(DE|FR|IT|RM)$")):
         "retrieved_at": datetime.now(timezone.utc).isoformat(),
         "members": sorted(unique.values(), key=lambda m: m["name"].casefold()),
     }
+
+
+@app.get("/api/odata-schema")
+async def odata_schema():
+    """Inspect actual OData entity sets and person-related fields without guessing names."""
+    url = f"{API.rstrip('/')}/$metadata"
+    try:
+        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+        root = ET.fromstring(response.content)
+        entity_sets = []
+        for node in root.iter():
+            if node.tag.rsplit("}", 1)[-1] == "EntitySet":
+                entity_sets.append({"name": node.attrib.get("Name"), "type": node.attrib.get("EntityType")})
+        entity_types = []
+        for node in root.iter():
+            if node.tag.rsplit("}", 1)[-1] != "EntityType":
+                continue
+            name = node.attrib.get("Name", "")
+            if not any(word in name.lower() for word in ("person", "communicat", "member", "social")):
+                continue
+            properties = [child.attrib.get("Name") for child in node if child.tag.rsplit("}", 1)[-1] == "Property"]
+            navigation = [child.attrib.get("Name") for child in node if child.tag.rsplit("}", 1)[-1] == "NavigationProperty"]
+            entity_types.append({"name": name, "properties": properties, "navigation": navigation})
+        return {"entity_sets": entity_sets, "relevant_types": entity_types}
+    except (httpx.HTTPError, ET.ParseError) as exc:
+        logger.warning("OData metadata unavailable: %s", exc)
+        raise HTTPException(status_code=502, detail=f"OData-Metadaten nicht abrufbar: {exc}") from exc
