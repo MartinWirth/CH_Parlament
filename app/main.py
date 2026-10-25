@@ -500,6 +500,14 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                 diagnostic["error_stage"] = stage if "stage" in locals() else "initial_url"
                 if "certificate" in str(exc).lower():
                     diagnostic["ssl_hint"] = "check_valid_certificate_on_alternate_www_hostname"
+        except Exception as exc:
+            # One malformed external site must not fail the entire refresh.
+            logger.exception("Homepage scan failed at stage %s for %s", stage if "stage" in locals() else "initial_url", url)
+            if diagnostic is not None:
+                diagnostic["status"] = type(exc).__name__
+                diagnostic["error_detail"] = str(exc)[:240]
+                diagnostic["error_stage"] = stage if "stage" in locals() else "initial_url"
+                diagnostic["error_stage_url"] = current if "current" in locals() else url
         _homepage_cache[url] = (time.time(), found)
         return found
 
