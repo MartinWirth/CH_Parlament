@@ -29,6 +29,15 @@ debugPhaseButton.addEventListener("click",()=>{
   if(debugPhase&&all.length)document.querySelector("#social-refresh").click();
 });
 function debug(message,data){const line=new Date().toISOString()+" "+message+(data===undefined?"":" "+JSON.stringify(data));console.info("[CH_Parlament]",line);logBox.textContent+=line+"\n";logBox.scrollTop=logBox.scrollHeight}
+async function copyDebugLog(){
+  try{
+    await navigator.clipboard.writeText(logBox.textContent);
+    console.info("[CH_Parlament] Debug-Log in Zwischenablage kopiert");
+  }catch(err){
+    console.warn("[CH_Parlament] Automatisches Kopieren nicht möglich",err);
+    debug("Zwischenablage: automatisches Kopieren blockiert; bitte Debug-Log anzeigen erneut klicken",{message:err.message});
+  }
+}
 document.querySelector("#debug-toggle").addEventListener("click",async e=>{logBox.hidden=!logBox.hidden;e.target.textContent=logBox.hidden?"Debug-Log anzeigen":"Debug-Log ausblenden";if(!logBox.hidden){try{await navigator.clipboard.writeText(logBox.textContent);debug("Debug-Log in Zwischenablage kopiert")}catch(err){debug("Zwischenablage konnte nicht beschrieben werden",{message:err.message})}}});
 document.querySelector("#debug-clear").addEventListener("click",()=>{logBox.textContent=""});
 debug("Frontend initialisiert");
@@ -69,7 +78,7 @@ async function refreshSocialProfiles(requested,version,applyProfiles){
     applyProfiles(await response.json(),"aktualisiert");
     if(version===loadVersion)debug("Social-Media-Aktualisierung abgeschlossen",{duration_ms:Math.round(performance.now()-started)});
   }catch(err){if(version===loadVersion)debug("Social-Media-Aktualisierung fehlgeschlagen",{message:err.message})}
-  finally{socialRefreshInProgress=false;button.disabled=false;if(debugPhase&&version===loadVersion){logBox.hidden=false;document.querySelector("#debug-toggle").textContent="Debug-Log ausblenden";logBox.scrollTop=logBox.scrollHeight}}
+  finally{socialRefreshInProgress=false;button.disabled=false;if(debugPhase&&version===loadVersion){logBox.hidden=false;document.querySelector("#debug-toggle").textContent="Debug-Log ausblenden";logBox.scrollTop=logBox.scrollHeight;copyDebugLog()}}
 }
 async function loadSocialProfiles(requested,version){
   const applyProfiles=(data,source)=>{
