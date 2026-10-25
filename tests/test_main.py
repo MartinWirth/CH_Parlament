@@ -125,3 +125,16 @@ def test_verified_personal_site_redirects(monkeypatch):
         assert not approved_homepage_redirect(source, "attacker.example")
         assert not approved_homepage_redirect("fake." + source, target)
     assert not approved_homepage_redirect("unknown.example", "marcjost.ch")
+
+
+def test_bounded_homepage_html():
+    from app.main import bounded_homepage_html
+    assert bounded_homepage_html(b"a" * 100) == b"a" * 100
+    diagnostic = {}
+    result = bounded_homepage_html(b"b" * 1_500_000, diagnostic)
+    assert len(result) == 1_000_000
+    assert diagnostic["html_truncated_for_parsing"] is True
+    assert diagnostic["html_bytes"] == 1_500_000
+    diagnostic = {}
+    assert bounded_homepage_html(b"c" * 3_000_001, diagnostic) is None
+    assert diagnostic["status"] == "html_too_large"
