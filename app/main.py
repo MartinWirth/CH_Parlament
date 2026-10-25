@@ -850,10 +850,14 @@ async def party_profile_links(member_rows):
         rejected = {}
         candidates = fetch_diagnostic.get("social_url_candidates", list(links.values()))
         for link in candidates:
-            platform = verified_social_url(link)
-            if not platform:
+            try:
+                platform = verified_social_url(link)
+                if not platform:
+                    continue
+                handle = ascii_key(urlparse(link).path)
+            except (ValueError, UnicodeError):
+                fetch_diagnostic["invalid_social_link_count"] = fetch_diagnostic.get("invalid_social_link_count", 0) + 1
                 continue
-            handle = ascii_key(urlparse(link).path)
             # A personal profile on the named party page is acceptable if the
             # handle contains the surname; never accept generic party accounts.
             is_personal = bool(surname and surname in handle)
