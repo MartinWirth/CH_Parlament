@@ -845,6 +845,21 @@ async def discover_other_party_profiles(member_rows):
     return discovered, diagnostics
 
 
+def party_personal_handle_matches(url, person_name):
+    """Match personal handles with Swiss German umlaut transliterations."""
+    from urllib.parse import unquote
+    def normalize_handle(value):
+        value = unquote(value).casefold()
+        value = value.replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
+        return "".join(c for c in unicodedata.normalize("NFKD", value) if c.isascii() and c.isalnum())
+    parts = person_name.split()
+    if len(parts) < 2:
+        return False
+    surname = normalize_handle(parts[-1])
+    handle = normalize_handle(urlparse(url).path)
+    return len(surname) >= 4 and surname in handle
+
+
 async def party_profile_links(member_rows):
     sources, diagnostic = configured_party_profiles(member_rows)
     discovered, discovery_diagnostic = await discover_sp_party_profiles(member_rows)
@@ -882,7 +897,7 @@ async def party_profile_links(member_rows):
                 continue
             # A personal profile on the named party page is acceptable if the
             # handle contains the surname; never accept generic party accounts.
-            is_personal = bool(surname and surname in handle)
+            is_personal = party_personal_handle_matches(link, members[number])
             # This abbreviated handle is explicitly linked on the named FDP
             # profile page, unlike generic party accounts in the footer.
             if number == "4290" and platform == "X" and urlparse(link).path.strip("/").lower() == "andrisilbi_":
