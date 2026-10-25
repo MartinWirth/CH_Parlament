@@ -368,12 +368,16 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                 candidate_links = list(parser.links) + list(parser.social_references())
                 if diagnostic is not None:
                     candidate_links += raw_social
+                    diagnostic["social_url_candidates"] = []
                 for href in candidate_links:
                     target = urljoin(current, href)
                     platform = verified_social_url(target)
                     if platform:
                         if diagnostic is not None:
                             diagnostic["parser"]["social_candidates"] += 1
+                        if diagnostic is not None:
+                            if target not in diagnostic["social_url_candidates"]:
+                                diagnostic["social_url_candidates"].append(target)
                         found.setdefault(platform, target)
                 if diagnostic is not None:
                     diagnostic["status"] = "parsed"
@@ -458,11 +462,23 @@ async def party_profile_links(member_rows):
         surname = ascii_key(members[number].split()[-1])
         accepted = {}
         rejected = {}
-        for platform, link in links.items():
-            if surname and surname in ascii_key(urlparse(link).path):
-                accepted[platform] = link
+        candidates = fetch_diagnostic.get("social_url_candidates", list(links.values()))
+        for link in candidates:
+            platform = verified_social_url(link)
+            if not platform:
+                continue
+            handle = ascii_key(urlparse(link).path)
+            # A personal profile on the named party page is acceptable if the
+            # handle contains the surname; never accept generic party accounts.
+            is_personal = bool(surname and surname in handle)
+            # This abbreviated handle is explicitly linked on the named FDP
+            # profile page, unlike generic party accounts in the footer.
+            if number == "4290" and platform == "X" and urlparse(link).path.strip("/").lower() == "andrisilbi_":
+                is_personal = True
+            if is_personal:
+                accepted.setdefault(platform, link)
             else:
-                rejected[platform] = {"url": link, "reason": "Nachname fehlt im Profilpfad"}
+                rejected.setdefault(platform, {"url": link, "reason": "Kein persönlicher Namensbezug im Profilpfad"})
         if accepted:
             verified[number] = accepted
         pages.append({
