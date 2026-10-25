@@ -14,7 +14,7 @@ language.addEventListener("change",()=>{debug("Anzeigesprache geändert",{langua
 search.addEventListener("input",render);document.querySelector("#reset").addEventListener("click",()=>{selected={};search.value="";filters.querySelectorAll("select").forEach(s=>s.selectedIndex=-1);render()});
 const logBox=document.querySelector("#debug-log");
 function debug(message,data){const line=new Date().toISOString()+" "+message+(data===undefined?"":" "+JSON.stringify(data));console.info("[CH_Parlament]",line);logBox.textContent+=line+"\n";logBox.scrollTop=logBox.scrollHeight}
-document.querySelector("#debug-toggle").addEventListener("click",e=>{logBox.hidden=!logBox.hidden;e.target.textContent=logBox.hidden?"Debug-Log anzeigen":"Debug-Log ausblenden"});
+document.querySelector("#debug-toggle").addEventListener("click",async e=>{logBox.hidden=!logBox.hidden;e.target.textContent=logBox.hidden?"Debug-Log anzeigen":"Debug-Log ausblenden";if(!logBox.hidden){try{await navigator.clipboard.writeText(logBox.textContent);debug("Debug-Log in Zwischenablage kopiert")}catch(err){debug("Zwischenablage konnte nicht beschrieben werden",{message:err.message})}}});
 document.querySelector("#debug-clear").addEventListener("click",()=>{logBox.textContent=""});
 debug("Frontend initialisiert");
 async function loadMembers(){
