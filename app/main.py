@@ -501,10 +501,64 @@ async def discover_sp_party_profiles(member_rows):
     return found, diagnostics
 
 
+async def discover_other_party_profiles(member_rows):
+    """Match official party roster links to active members, without guessing URLs."""
+    rosters = {
+        "FDP": [("https://www.fdp.ch/partei/organe/fraktion/", "fdp.ch", "/personen/")],
+        "SVP": [("https://www.svp.ch/menschen/personen/", "svp.ch", "/menschen/portrait/")],
+        "Mitte": [("https://die-mitte.ch/die-mitte/menschen/", "die-mitte.ch", "/")],
+        "Gruene": [("https://gruene.ch/organisation/menschen", "gruene.ch", "/")],
+    }
+    def key(value):
+        return "".join(c for c in unicodedata.normalize("NFKD", value.casefold()) if c.isascii() and c.isalnum())
+    members = {}
+    for row in member_rows:
+        if not is_current(row):
+            continue
+        name = normalize(row)["name"]
+        party = str(pick(row, "PartyAbbreviation", "PartyName")).upper()
+        group = "FDP" if party in ("FDP", "PLR") else "SVP" if party in ("SVP", "UDC") else "Mitte" if party in ("M-E", "MITTE", "CVP", "PDC") else "Gruene" if party in ("GPS", "PES", "GRÜNE", "GRUENE") else None
+        if group:
+            members.setdefault(group, []).append((str(pick(row, "PersonNumber")), name))
+    discovered, diagnostics = {}, {}
+    async with httpx.AsyncClient(timeout=8, trust_env=False, follow_redirects=False) as client:
+        for group, roster_list in rosters.items():
+            for roster_url, host, prefix in roster_list:
+                report = {"status": "pending", "matched": 0, "url": roster_url}
+                diagnostics[group] = report
+                try:
+                    response = await client.get(roster_url)
+                    response.raise_for_status()
+                    if "text/html" not in response.headers.get("content-type", "").lower() or len(response.content) > 500_000:
+                        report["status"] = "invalid_html"
+                        continue
+                    parser = SocialLinkParser()
+                    parser.feed(response.text)
+                    matches = {}
+                    for href in parser.links:
+                        url = urljoin(roster_url, href)
+                        parsed = urlparse(url)
+                        if parsed.scheme != "https" or parsed.hostname not in (host, "www." + host) or not parsed.path.startswith(prefix):
+                            continue
+                        path_key = key(parsed.path.rstrip("/").split("/")[-1])
+                        if not path_key:
+                            continue
+                        candidates = [number for number, name in members.get(group, []) if key(name) == path_key]
+                        if len(candidates) == 1:
+                            matches[candidates[0]] = url.split("?", 1)[0].split("#", 1)[0]
+                    discovered.update(matches)
+                    report.update({"status": "parsed", "matched": len(matches), "links": len(parser.links)})
+                except (httpx.HTTPError, ValueError) as exc:
+                    report.update({"status": "fetch_failed", "error": str(exc)[:150]})
+    return discovered, diagnostics
+
+
 async def party_profile_links(member_rows):
     sources, diagnostic = configured_party_profiles(member_rows)
     discovered, discovery_diagnostic = await discover_sp_party_profiles(member_rows)
-    diagnostic["discovery"] = discovery_diagnostic
+    other_discovered, other_diagnostics = await discover_other_party_profiles(member_rows)
+    diagnostic["discovery"] = {"SP": discovery_diagnostic, "other_parties": other_diagnostics}
+    discovered.update(other_discovered)
     for number, url in discovered.items():
         sources.setdefault(number, url)
     if not sources:
