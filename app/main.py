@@ -354,8 +354,8 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                 html_text = content.decode("utf-8", errors="replace")
                 parser.feed(html_text)
                 raw_social = []
-                for match in re.findall(r'https?://[^\\s"<>]{5,250}', html_text, flags=re.I):
-                    candidate = match.replace("\\\\/", "/").rstrip("),;")
+                for match in re.findall(r'https?://[^\s"<>]{5,250}', html_text, flags=re.I):
+                    candidate = match.replace("\\/", "/").rstrip("),;")
                     if verified_social_url(candidate) and candidate not in raw_social:
                         raw_social.append(candidate)
                 if diagnostic is not None:
