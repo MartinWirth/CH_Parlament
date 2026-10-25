@@ -187,46 +187,46 @@ async def members(language: str = Query("DE", pattern="^(DE|FR|IT|RM)$")):
 
 @app.get("/api/person-communications-diagnostic")
 async def person_communications_diagnostic(person_number: int = Query(4100, ge=1)):
-    """Compare the direct collection with the OData Person navigation property."""
+    """Compare unfiltered Person results, filtered lookup, and person navigation."""
     base = API.rstrip("/")
-    urls = {
-        "direct": f"{base}/PersonCommunication?$format=json&$top=2",
-        "person": f"{base}/Person?$format=json&$filter=PersonNumber%20eq%20{person_number}%20and%20Language%20eq%20'DE'&$top=1",
-        "navigation": f"{base}/PersonCommunications",
-    }
     result = {}
     async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-        for name in ("direct", "person"):
+        async def fetch(label, path, params):
             try:
-                response = await client.get(urls[name])
+                response = await client.get(f"{base}/{path}", params=params)
                 response.raise_for_status()
                 payload = response.json()
                 data = payload.get("d", payload)
                 rows = data.get("results", []) if isinstance(data, dict) else []
-                result[name] = {"status": response.status_code, "count": len(rows), "keys": list(rows[0]) if rows else []}
-                if name == "person" and rows:
-                    person = rows[0]
-                    nav = person.get("PersonCommunications")
-                    uri = nav.get("__deferred", {}).get("uri") if isinstance(nav, dict) else None
-                    if uri:
-                        urls["navigation"] = uri
+                result[label] = {
+                    "status": response.status_code,
+                    "count": len(rows),
+                    "sample": [{"PersonNumber": x.get("PersonNumber"), "Language": x.get("Language"), "ID": x.get("ID"), "navigation_available": bool(isinstance(x.get("PersonCommunications"), dict) and x["PersonCommunications"].get("__deferred", {}).get("uri"))} for x in rows[:3]],
+                }
+                return rows
             except (httpx.HTTPError, ValueError, TypeError) as exc:
-                result[name] = {"error": str(exc)[:250]}
-        if urls["navigation"].endswith("/PersonCommunications"):
-            result["navigation"] = {"error": "No PersonCommunications navigation URI found on Person"}
-        else:
+                result[label] = {"error": str(exc)[:250]}
+                return []
+
+        await fetch("direct", "PersonCommunication", {"$format": "json", "$top": 2})
+        await fetch("person_unfiltered", "Person", {"$format": "json", "$top": 3})
+        rows = await fetch("person_filtered", "Person", {"$format": "json", "$filter": f"PersonNumber eq {person_number}", "$top": 3})
+        nav_uri = next((x.get("PersonCommunications", {}).get("__deferred", {}).get("uri") for x in rows if isinstance(x.get("PersonCommunications"), dict) and x["PersonCommunications"].get("__deferred", {}).get("uri")), None)
+        if nav_uri:
             try:
-                response = await client.get(urls["navigation"], params={"$format": "json"})
+                response = await client.get(nav_uri, params={"$format": "json"})
                 response.raise_for_status()
                 payload = response.json()
                 data = payload.get("d", payload)
-                rows = data.get("results", []) if isinstance(data, dict) else []
+                records = data.get("results", []) if isinstance(data, dict) else []
                 result["navigation"] = {
-                    "status": response.status_code, "count": len(rows),
-                    "sample": [{"Language": x.get("Language"), "CommunicationType": x.get("CommunicationType"), "CommunicationTypeText": x.get("CommunicationTypeText"), "address_domain": (urlparse(x.get("Address") or "").hostname or "")} for x in rows[:10]]
+                    "status": response.status_code, "count": len(records),
+                    "sample": [{"Language": x.get("Language"), "CommunicationType": x.get("CommunicationType"), "CommunicationTypeText": x.get("CommunicationTypeText"), "address_domain": urlparse(x.get("Address") or "").hostname or ""} for x in records[:10]]
                 }
             except (httpx.HTTPError, ValueError, TypeError) as exc:
                 result["navigation"] = {"error": str(exc)[:250]}
+        else:
+            result["navigation"] = {"error": "No navigation URI on filtered Person results"}
     return {"person_number": person_number, "results": result}
 
 
