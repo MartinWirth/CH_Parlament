@@ -52,7 +52,7 @@ async function loadSocialProfiles(requested,version){
       if(links&&Object.keys(links).length){member.socialmedia={...member.socialmedia,...links};updated++}
     }
     render();
-    debug("Social-Media-Abfrage abgeschlossen",{duration_ms:Math.round(performance.now()-started),updated_members:updated,backend:data.debug});
+    debug("Social-Media-Abfrage abgeschlossen",{duration_ms:Math.round(performance.now()-started),updated_members:updated,updated_at:data.updated_at,backend:data.debug});
   }catch(err){if(version===loadVersion)debug("Social-Media-Abfrage fehlgeschlagen",{message:err.message})}
 }
 loadMembers();
