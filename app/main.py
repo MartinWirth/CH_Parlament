@@ -304,33 +304,47 @@ def public_hostname(host):
         return False
 
 
-async def scan_homepage(client, url, semaphore):
+async def scan_homepage(client, url, semaphore, diagnostic=None):
     now = time.time()
     cached = _homepage_cache.get(url)
-    if cached and now - cached[0] < _homepage_cache_ttl:
+    if cached and now - cached[0] < _homepage_cache_ttl and diagnostic is None:
         return cached[1]
     async with semaphore:
         found = {}
+        if diagnostic is not None:
+            diagnostic.update({"status": "pending", "http_status": None, "final_url": url, "redirects": [], "cache_hit": bool(cached and now - cached[0] < _homepage_cache_ttl)})
         try:
             original = urlparse(url)
             if not await asyncio.to_thread(public_hostname, original.hostname):
+                if diagnostic is not None:
+                    diagnostic["status"] = "hostname_not_public"
                 return found
             current = url
             for _ in range(3):
                 async with client.stream("GET", current, follow_redirects=False) as response:
+                    if diagnostic is not None:
+                        diagnostic.update({"http_status": response.status_code, "final_url": current})
                     if response.status_code in (301, 302, 303, 307, 308):
                         target = urljoin(current, response.headers.get("location", ""))
                         parsed = urlparse(target)
+                        if diagnostic is not None:
+                            diagnostic["redirects"].append(target)
                         if parsed.scheme != "https" or parsed.hostname != original.hostname or parsed.port not in (None, 443) or parsed.username or parsed.password:
+                            if diagnostic is not None:
+                                diagnostic["status"] = "redirect_blocked"
                             return found
                         current = target
                         continue
                     if response.status_code != 200 or "text/html" not in response.headers.get("content-type", "").lower():
+                        if diagnostic is not None:
+                            diagnostic["status"] = "http_error_or_not_html"
                         return found
                     content = bytearray()
                     async for chunk in response.aiter_bytes():
                         content.extend(chunk)
                         if len(content) > 300_000:
+                            if diagnostic is not None:
+                                diagnostic["status"] = "html_too_large"
                             return found
                 parser = SocialLinkParser()
                 parser.feed(content.decode("utf-8", errors="replace"))
@@ -339,9 +353,15 @@ async def scan_homepage(client, url, semaphore):
                     platform = verified_social_url(target)
                     if platform:
                         found.setdefault(platform, target)
+                if diagnostic is not None:
+                    diagnostic["status"] = "parsed"
                 break
-        except (httpx.HTTPError, ValueError, UnicodeError):
-            pass
+            else:
+                if diagnostic is not None:
+                    diagnostic["status"] = "too_many_redirects"
+        except (httpx.HTTPError, ValueError, UnicodeError) as exc:
+            if diagnostic is not None:
+                diagnostic["status"] = type(exc).__name__
         _homepage_cache[url] = (time.time(), found)
         return found
 
@@ -407,11 +427,12 @@ async def party_profile_links(member_rows):
     def ascii_key(value):
         return "".join(ch for ch in unicodedata.normalize("NFKD", value.casefold()) if ch.isascii() and ch.isalnum())
     async with httpx.AsyncClient(timeout=5, trust_env=False, headers={"User-Agent": "CH-Parlament/1.0"}) as client:
-        results = await asyncio.gather(*(scan_homepage(client, url, semaphore) for url in sources.values()))
+        page_diagnostics = [{} for _ in sources]
+        results = await asyncio.gather(*(scan_homepage(client, url, semaphore, page_diagnostics[i]) for i, url in enumerate(sources.values())))
     save_homepage_cache()
     verified = {}
     pages = []
-    for (number, page_url), links in zip(sources.items(), results):
+    for (number, page_url), links, fetch_diagnostic in zip(sources.items(), results, page_diagnostics):
         surname = ascii_key(members[number].split()[-1])
         accepted = {}
         rejected = {}
@@ -427,6 +448,7 @@ async def party_profile_links(member_rows):
             "name": members[number],
             "profile_url": page_url,
             "found_links": len(links),
+            "fetch": fetch_diagnostic,
             "accepted": accepted,
             "rejected": rejected,
             "note": "Keine Links gefunden: Seite nicht erreichbar, kein HTML, Cache leer oder keine Social-Links" if not links else None,
