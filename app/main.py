@@ -403,6 +403,10 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                         if attempt == 1:
                             raise
                         await asyncio.sleep(0.2)
+                if response is None:
+                    if diagnostic is not None:
+                        diagnostic["status"] = "tls_fallback_failed"
+                    return found
                 if response is not None:
                     if diagnostic is not None:
                         diagnostic.update({"http_status": response.status_code, "final_url": current})
