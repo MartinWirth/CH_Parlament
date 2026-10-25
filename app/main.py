@@ -94,9 +94,10 @@ async def fetch_members(language="DE"):
 
 
 async def fetch_communications(language):
-    """Read OData communications without an unverified server-side language filter."""
+    """Fetch communication records and return diagnostic counts without exposing addresses."""
     url = f"{API.rstrip('/')}/PersonCommunication"
     rows, seen = [], set()
+    diagnostic = {"http_status": None, "raw_count": 0, "languages": {}, "communication_types": {}, "error": None}
     try:
         async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
             while url and len(seen) < 30:
@@ -104,18 +105,27 @@ async def fetch_communications(language):
                     break
                 seen.add(url)
                 response = await client.get(url, params={"$format": "json", "$top": 1000} if len(seen) == 1 else None)
+                diagnostic["http_status"] = response.status_code
                 response.raise_for_status()
                 payload = response.json()
                 data = payload.get("d", payload)
                 page = data.get("results", []) if isinstance(data, dict) and "results" in data else data.get("value", []) if isinstance(data, dict) else []
                 rows.extend(page)
-                next_url = data.get("__next") or data.get("@odata.nextLink") if isinstance(data, dict) else None
+                next_url = (data.get("__next") or data.get("@odata.nextLink")) if isinstance(data, dict) else None
                 url = str(httpx.URL(url).join(next_url)) if next_url else None
-        logger.info("PersonCommunication rows=%d sample_keys=%s", len(rows), list(rows[0]) if rows else [])
-        return [row for row in rows if str(row.get("Language", "")).upper() == language]
+        diagnostic["raw_count"] = len(rows)
+        for row in rows:
+            lang = str(row.get("Language", ""))
+            kind = str(row.get("CommunicationTypeText") or row.get("CommunicationType") or "")
+            diagnostic["languages"][lang] = diagnostic["languages"].get(lang, 0) + 1
+            diagnostic["communication_types"][kind] = diagnostic["communication_types"].get(kind, 0) + 1
+        selected = [row for row in rows if str(row.get("Language", "")).upper() == language]
+        logger.info("PersonCommunication diagnostic=%s filtered=%d", diagnostic, len(selected))
+        return selected, diagnostic
     except (httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
-        logger.warning("PersonCommunication unavailable: %s", exc)
-        return []
+        diagnostic["error"] = str(exc)[:300]
+        logger.warning("PersonCommunication diagnostic=%s", diagnostic)
+        return [], diagnostic
 
 def communication_profiles(rows):
     """Match only explicit social-network URLs and a person number."""
@@ -157,7 +167,7 @@ async def members(language: str = Query("DE", pattern="^(DE|FR|IT|RM)$")):
     except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
         logger.exception("Member API request failed")
         raise HTTPException(status_code=502, detail=f"Parlamentsdienst nicht erreichbar: {exc}") from exc
-    communications = await fetch_communications(language)
+    communications, communication_debug = await fetch_communications(language)
     profiles = communication_profiles(communications)
     result = [normalize(row) for row in rows if is_current(row)]
     for member in result:
@@ -167,7 +177,7 @@ async def members(language: str = Query("DE", pattern="^(DE|FR|IT|RM)$")):
     unique = {(item["id"], item["rat"]): item for item in result if item["name"]}
     logger.info("Members returned unique=%d", len(unique))
     return {
-        "debug": {"raw_count": len(rows), "current_count": len(result), "unique_count": len(unique), "sample_keys": list(rows[0].keys()) if rows else [], "active_sample": [{"Active": r.get("Active"), "DateLeaving": r.get("DateLeaving")} for r in rows[:3]], "social_profiles": sum(bool(m["socialmedia"]) for m in unique.values()), "communication_count": len(communications), "communication_sample_keys": list(communications[0]) if communications else []},
+        "debug": {"raw_count": len(rows), "current_count": len(result), "unique_count": len(unique), "sample_keys": list(rows[0].keys()) if rows else [], "active_sample": [{"Active": r.get("Active"), "DateLeaving": r.get("DateLeaving")} for r in rows[:3]], "social_profiles": sum(bool(m["socialmedia"]) for m in unique.values()), "communication_count": len(communications), "communication_sample_keys": list(communications[0]) if communications else [], "communication_diagnostic": communication_debug},
         "data_language": language,
         "source": "Parlamentsdienste der Bundesversammlung, Bern",
         "retrieved_at": datetime.now(timezone.utc).isoformat(),
