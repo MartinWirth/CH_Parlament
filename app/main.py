@@ -3,6 +3,12 @@ from pathlib import Path
 import os
 import logging
 import time
+import asyncio
+import ipaddress
+import socket
+import re
+from html.parser import HTMLParser
+from urllib.parse import urljoin
 import xml.etree.ElementTree as ET
 from urllib.parse import urlparse
 import httpx
@@ -162,6 +168,112 @@ def communication_profiles(rows):
     return result
 
 
+class SocialLinkParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.links = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag.lower() != "a":
+            return
+        href = dict(attrs).get("href")
+        if href:
+            self.links.append(href)
+
+
+_homepage_cache = {}
+_homepage_cache_ttl = 86400
+_social_domains = {
+    "X": ("x.com", "twitter.com"),
+    "Facebook": ("facebook.com", "fb.com"),
+    "Instagram": ("instagram.com",),
+    "LinkedIn": ("linkedin.com",),
+    "YouTube": ("youtube.com", "youtu.be"),
+}
+
+
+def verified_social_url(value):
+    parsed = urlparse(value)
+    host = (parsed.hostname or "").lower().rstrip(".")
+    if parsed.scheme != "https" or parsed.username or parsed.password:
+        return None
+    for platform, domains in _social_domains.items():
+        if any(host == domain or host.endswith("." + domain) for domain in domains):
+            if parsed.path.strip("/") and not parsed.path.startswith(("/share", "/intent", "/sharer")):
+                return platform
+    return None
+
+
+def homepage_url(value):
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    if not value or re.search(r"\\s", value):
+        return None
+    if value.startswith("www."):
+        value = "https://" + value
+    parsed = urlparse(value)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or parsed.port not in (None, 443):
+        return None
+    return value
+
+
+def public_hostname(host):
+    try:
+        addresses = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+        return bool(addresses) and all(ipaddress.ip_address(info[4][0]).is_global for info in addresses)
+    except (OSError, ValueError):
+        return False
+
+
+async def scan_homepage(client, url, semaphore):
+    now = time.monotonic()
+    cached = _homepage_cache.get(url)
+    if cached and now - cached[0] < _homepage_cache_ttl:
+        return cached[1]
+    async with semaphore:
+        found = {}
+        try:
+            parsed = urlparse(url)
+            if not await asyncio.to_thread(public_hostname, parsed.hostname):
+                return found
+            # Never follow redirects to untrusted/internal hosts.
+            async with client.stream("GET", url, follow_redirects=False) as response:
+                if response.status_code != 200 or "text/html" not in response.headers.get("content-type", "").lower():
+                    return found
+                content = bytearray()
+                async for chunk in response.aiter_bytes():
+                    content.extend(chunk)
+                    if len(content) > 300_000:
+                        return found
+            parser = SocialLinkParser()
+            parser.feed(content.decode("utf-8", errors="replace"))
+            for href in parser.links:
+                target = urljoin(url, href)
+                platform = verified_social_url(target)
+                if platform:
+                    found.setdefault(platform, target)
+        except (httpx.HTTPError, ValueError, UnicodeError):
+            pass
+        _homepage_cache[url] = (time.monotonic(), found)
+        return found
+
+
+async def homepage_profiles(communications):
+    homepages = {}
+    for row in communications:
+        if str(row.get("CommunicationTypeText", "")).lower() not in ("homepage", "page d'accueil", "sito internet"):
+            continue
+        url = homepage_url(row.get("Address"))
+        if url:
+            homepages.setdefault(str(row.get("PersonNumber")), url)
+    semaphore = asyncio.Semaphore(8)
+    async with httpx.AsyncClient(timeout=5, trust_env=False, headers={"User-Agent": "CH-Parlament/1.0"}) as client:
+        tasks = [scan_homepage(client, url, semaphore) for url in homepages.values()]
+        results = await asyncio.gather(*tasks)
+    return {number: links for number, links in zip(homepages, results) if links}, len(homepages)
+
+
 @app.get("/")
 def index():
     return FileResponse(ROOT / "static" / "index.html")
@@ -177,14 +289,16 @@ async def members(language: str = Query("DE", pattern="^(DE|FR|IT|RM)$")):
     result = [normalize(row) for row in rows if is_current(row)]
     communications, communication_debug = await fetch_communications(language, {member["id"] for member in result})
     profiles = communication_profiles(communications)
+    website_profiles, scanned_homepages = await homepage_profiles(communications)
     for member in result:
+        member["socialmedia"].update(website_profiles.get(member["id"], {}))
         member["socialmedia"].update(profiles.get(member["id"], {}))
     logger.info("Members normalized raw=%d current=%d sample=%s", len(rows), len(result), result[0] if result else None)
     # One member can appear in several records; preserve distinct council memberships.
     unique = {(item["id"], item["rat"]): item for item in result if item["name"]}
     logger.info("Members returned unique=%d", len(unique))
     return {
-        "debug": {"raw_count": len(rows), "current_count": len(result), "unique_count": len(unique), "sample_keys": list(rows[0].keys()) if rows else [], "active_sample": [{"Active": r.get("Active"), "DateLeaving": r.get("DateLeaving")} for r in rows[:3]], "social_profiles": sum(bool(m["socialmedia"]) for m in unique.values()), "communication_count": len(communications), "communication_sample_keys": list(communications[0]) if communications else [], "communication_diagnostic": communication_debug},
+        "debug": {"raw_count": len(rows), "current_count": len(result), "unique_count": len(unique), "sample_keys": list(rows[0].keys()) if rows else [], "active_sample": [{"Active": r.get("Active"), "DateLeaving": r.get("DateLeaving")} for r in rows[:3]], "social_profiles": sum(bool(m["socialmedia"]) for m in unique.values()), "homepages_checked": scanned_homepages, "homepage_profiles": len(website_profiles), "communication_count": len(communications), "communication_sample_keys": list(communications[0]) if communications else [], "communication_diagnostic": communication_debug},
         "data_language": language,
         "source": "Parlamentsdienste der Bundesversammlung, Bern",
         "retrieved_at": datetime.now(timezone.utc).isoformat(),
