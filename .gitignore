@@ -3,3 +3,5 @@ __pycache__/
 .venv/
 .env
 *.pyc
+
+.social_profiles_cache.json
