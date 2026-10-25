@@ -5,3 +5,5 @@ __pycache__/
 *.pyc
 
 .social_profiles_cache.json
+
+.social_profiles_snapshot.json
