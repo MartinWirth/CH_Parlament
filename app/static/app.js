@@ -13,6 +13,21 @@ const headers=document.querySelector("#headers");for(const [key,label] of Object
 language.addEventListener("change",()=>{debug("Anzeigesprache geändert",{language:language.value});loadMembers()});
 search.addEventListener("input",render);document.querySelector("#reset").addEventListener("click",()=>{selected={};search.value="";filters.querySelectorAll("select").forEach(s=>s.selectedIndex=-1);render()});
 const logBox=document.querySelector("#debug-log");
+let debugPhase=true;
+const debugPhaseButton=document.querySelector("#debug-phase");
+function setDebugPhase(enabled){
+  debugPhase=enabled;
+  debugPhaseButton.textContent="Debug-Phase: "+(enabled?"EIN":"AUS");
+  debugPhaseButton.setAttribute("aria-pressed",String(enabled));
+  logBox.hidden=!enabled;
+  document.querySelector("#debug-toggle").textContent=enabled?"Debug-Log ausblenden":"Debug-Log anzeigen";
+}
+setDebugPhase(true);
+debugPhaseButton.addEventListener("click",()=>{
+  setDebugPhase(!debugPhase);
+  debug("Debug-Phase geändert",{enabled:debugPhase});
+  if(debugPhase&&all.length)loadSocialProfiles(language.value,loadVersion);
+});
 function debug(message,data){const line=new Date().toISOString()+" "+message+(data===undefined?"":" "+JSON.stringify(data));console.info("[CH_Parlament]",line);logBox.textContent+=line+"\n";logBox.scrollTop=logBox.scrollHeight}
 document.querySelector("#debug-toggle").addEventListener("click",async e=>{logBox.hidden=!logBox.hidden;e.target.textContent=logBox.hidden?"Debug-Log anzeigen":"Debug-Log ausblenden";if(!logBox.hidden){try{await navigator.clipboard.writeText(logBox.textContent);debug("Debug-Log in Zwischenablage kopiert")}catch(err){debug("Zwischenablage konnte nicht beschrieben werden",{message:err.message})}}});
 document.querySelector("#debug-clear").addEventListener("click",()=>{logBox.textContent=""});
@@ -81,7 +96,7 @@ async function loadSocialProfiles(requested,version){
   }catch(err){debug("Social-Media-Cache nicht verfügbar",{message:err.message})}
   if(version!==loadVersion)return;
   const age=updatedAt?Date.now()-Date.parse(updatedAt):Infinity;
-  if(Number.isFinite(age)&&age>=0&&age<SOCIAL_TTL_MS){
+  if(!debugPhase&&Number.isFinite(age)&&age>=0&&age<SOCIAL_TTL_MS){
     debug("Social-Media-Aktualisierung übersprungen",{reason:"Cache jünger als 24 Stunden",age_minutes:Math.round(age/60000)});
     return;
   }
