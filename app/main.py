@@ -552,7 +552,10 @@ async def homepage_profiles(communications, member_names=None):
     for (number, _), links, diagnostic in zip(homepages.items(), results, diagnostics):
         combined = dict(links)
         for candidate in diagnostic.get("raw_social_urls", []):
-            platform = verified_social_url(candidate)
+            try:
+                platform = verified_social_url(candidate)
+            except (ValueError, UnicodeError):
+                continue
             if platform and platform not in combined and personal_handle_matches(candidate, (member_names or {}).get(number, "")):
                 combined[platform] = candidate
         if combined:
