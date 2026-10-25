@@ -33,3 +33,19 @@ def test_fdp_roster_person_name_strips_office_titles():
     assert fdp_roster_person_name("Damien Cottier Ständerat") == "Damien Cottier"
     assert fdp_roster_person_name("  Marcel Dobler   Nationalrat  ") == "Marcel Dobler"
     assert fdp_roster_person_name("Andri Silberschmidt") == "Andri Silberschmidt"
+
+
+def test_www_redirect_only_same_domain():
+    from app.main import same_site_www_redirect
+    assert same_site_www_redirect("example.ch", "www.example.ch")
+    assert same_site_www_redirect("www.example.ch", "example.ch")
+    assert same_site_www_redirect("example.ch", "example.ch")
+    assert not same_site_www_redirect("example.ch", "evil-example.ch")
+    assert not same_site_www_redirect("example.ch", "example.com")
+
+
+def test_social_parser_twitter_creator_metadata():
+    from app.main import SocialLinkParser
+    parser = SocialLinkParser()
+    parser.feed('<meta name="twitter:creator" content="@exampleperson">')
+    assert "https://twitter.com/exampleperson" in parser.links
