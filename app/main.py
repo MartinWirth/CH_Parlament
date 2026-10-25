@@ -109,7 +109,7 @@ async def fetch_communications(language):
                 response.raise_for_status()
                 payload = response.json()
                 data = payload.get("d", payload)
-                page = data.get("results", []) if isinstance(data, dict) and "results" in data else data.get("value", []) if isinstance(data, dict) else []
+                page = data if isinstance(data, list) else data.get("results", data.get("value", [])) if isinstance(data, dict) else []
                 rows.extend(page)
                 next_url = (data.get("__next") or data.get("@odata.nextLink")) if isinstance(data, dict) else None
                 url = str(httpx.URL(url).join(next_url)) if next_url else None
