@@ -870,6 +870,19 @@ async def party_profile_links(member_rows):
     other_discovered, other_diagnostics = await discover_other_party_profiles(member_rows)
     diagnostic["discovery"] = {"SP": discovery_diagnostic, "other_parties": other_diagnostics}
     discovered.update(other_discovered)
+    # Additional official person pages verified independently. Only exact active
+    # member names are eligible; no URLs or social handles are guessed.
+    official_additional_pages = {
+        "Nik Gugger": "https://www.evppev.ch/menschen/nationalrat-und-fraktion/nr-nik-gugger/",
+        "Martine Docourt": "https://www.sp-ps.ch/person/martine-docourt-ducommun/",
+    }
+    extra_matched = {}
+    for number, name in ((str(pick(row, "PersonNumber")), normalize(row)["name"]) for row in member_rows if is_current(row)):
+        page = official_additional_pages.get(name)
+        if page and number not in sources:
+            extra_matched[number] = page
+            discovered.setdefault(number, page)
+    diagnostic["additional_official_pages"] = {"matched": len(extra_matched), "members": list(extra_matched.values())}
     for number, url in discovered.items():
         sources.setdefault(number, url)
     if not sources:
