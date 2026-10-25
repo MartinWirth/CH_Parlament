@@ -529,7 +529,7 @@ def fdp_roster_person_name(label):
     """Remove office labels from FDP roster link text before matching names."""
     label = " ".join(label.split())
     office = r"(?:Nationalrätin|Nationalrat|Ständerätin|Ständerat|Conseillère nationale|Conseiller national|Conseillère aux États|Conseiller aux États)"
-    return re.sub(r"\\s+" + office + r"(?:\\s+.*)?$", "", label, flags=re.IGNORECASE).strip()
+    return re.sub(r"\s+" + office + r"(?:\s+.*)?$", "", label, flags=re.IGNORECASE).strip()
 
 
 async def discover_other_party_profiles(member_rows):
@@ -575,6 +575,7 @@ async def discover_other_party_profiles(member_rows):
                         fdp_parser = FdpRosterLinkParser()
                         fdp_parser.feed(response.text)
                         modal_samples = []
+                        match_diagnostics = []
                         for href, label in fdp_parser.entries:
                             parsed_modal = urlparse(urljoin(roster_url, href))
                             query = parse_qs(parsed_modal.query)
@@ -586,6 +587,16 @@ async def discover_other_party_profiles(member_rows):
                             candidates = [number for number, name in members.get(group, []) if key(name) == key(clean_name)]
                             if len(candidates) == 1:
                                 matches[candidates[0]] = urljoin(roster_url, href)
+                            if len(match_diagnostics) < 20:
+                                match_diagnostics.append({
+                                    "label": label[:100],
+                                    "clean_name": clean_name[:100],
+                                    "normalized_key": key(clean_name),
+                                    "candidate_count": len(candidates),
+                                    "candidate_names": [name for number, name in members.get(group, []) if key(name) == key(clean_name)][:3],
+                                    "reason": "matched" if len(candidates) == 1 else "ambiguous" if candidates else "no_exact_name_match",
+                                })
+                        report["modal_match_diagnostics"] = match_diagnostics
                         report["modal_matched"] = len(matches)
                         report["modal_link_samples"] = modal_samples
                     for href in parser.links:
