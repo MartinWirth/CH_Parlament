@@ -452,8 +452,41 @@ async def homepage_profiles(communications, member_names=None):
                 combined[platform] = candidate
         if combined:
             enriched[number] = combined
+    from collections import Counter
+    statuses = Counter()
+    missing_details = []
+    for (number, url), diagnostic in zip(homepages.items(), diagnostics):
+        if number in enriched:
+            continue
+        status = diagnostic.get("status", "unknown")
+        candidates = diagnostic.get("social_url_candidates", [])
+        if status != "parsed":
+            reason = "fetch_error"
+        elif candidates:
+            reason = "no_verified_personal_link"
+        else:
+            reason = "no_social_links"
+        statuses[reason] += 1
+        missing_details.append({
+            "person_number": number,
+            "name": (member_names or {}).get(number, ""),
+            "homepage": url,
+            "reason": reason,
+            "fetch_status": status,
+            "retry_errors": diagnostic.get("retry_errors", []),
+            "candidate_count": len(candidates),
+            "candidate_samples": candidates[:5],
+        })
+    homepage_report = {
+        "checked": len(homepages),
+        "with_personal_links": len(enriched),
+        "without_personal_links": len(missing_details),
+        "reasons": dict(statuses),
+        "fetch_statuses": dict(Counter(d.get("status", "unknown") for d in diagnostics)),
+        "missing_details": missing_details,
+    }
     save_homepage_cache()
-    return enriched, len(homepages)
+    return enriched, len(homepages), homepage_report
 
 
 _party_sources_path = Path(os.getenv("PARTY_PROFILE_SOURCES", str(ROOT.parent / "party_profile_sources.json")))
@@ -795,7 +828,7 @@ async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|I
     rows = await fetch_members(language)
     ids = {str(pick(row, "PersonNumber")) for row in rows if is_current(row)}
     communications, diagnostic = await fetch_communications(language, ids)
-    profiles, homepages = await homepage_profiles(communications, {str(pick(row, "PersonNumber")): normalize(row)["name"] for row in rows if is_current(row)})
+    profiles, homepages, homepage_report = await homepage_profiles(communications, {str(pick(row, "PersonNumber")): normalize(row)["name"] for row in rows if is_current(row)})
     personal_profiles = {number: dict(links) for number, links in profiles.items()}
     parliament_profiles = communication_profiles(communications)
     party_links, party_diagnostic = await party_profile_links(rows)
@@ -825,7 +858,7 @@ async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|I
         "members_without_social_profiles": len(ids - set(profiles)),
     }
     platforms = {platform: sum(platform in links for links in profiles.values()) for platform in _social_domains}
-    data = {"profiles": profiles, "profiles_by_source": by_source, "updated_at": datetime.now(timezone.utc).isoformat(), "cached": False, "debug": {"party_sources": party_diagnostic, "party_members_added": party_added, "coverage": missing, "platforms": platforms, "homepages_checked": homepages, "homepage_profiles": len(profiles), "communication_count": len(communications), "communication_error": diagnostic.get("error")}}
+    data = {"profiles": profiles, "profiles_by_source": by_source, "updated_at": datetime.now(timezone.utc).isoformat(), "cached": False, "debug": {"party_sources": party_diagnostic, "party_members_added": party_added, "coverage": missing, "platforms": platforms, "homepages_checked": homepages, "homepage_diagnostics": homepage_report, "homepage_profiles": len(profiles), "communication_count": len(communications), "communication_error": diagnostic.get("error")}}
     snapshot = read_profile_snapshot()
     snapshot[language] = data
     save_profile_snapshot(snapshot)
