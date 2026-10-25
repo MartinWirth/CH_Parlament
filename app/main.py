@@ -455,9 +455,13 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                 parser = SocialLinkParser()
                 html_text = content.decode("utf-8", errors="replace")
                 parser.feed(html_text)
+                # SP and other CMS pages can serialize personal links inside
+                # HTML entities or JSON-escaped script strings.
+                from html import unescape
+                normalized_markup = unescape(html_text).replace(r"\u002F", "/").replace(r"\u002f", "/").replace(r"\/", "/")
                 raw_social = []
-                for match in re.findall(r'https?://[^\s"<>]{5,250}', html_text, flags=re.I):
-                    candidate = match.replace("\\/", "/").rstrip("),;")
+                for match in re.findall(r'https?://[^\s"<>]{5,250}', normalized_markup, flags=re.I):
+                    candidate = match.rstrip("),;")
                     try:
                         valid_social = verified_social_url(candidate)
                     except (ValueError, UnicodeError):
