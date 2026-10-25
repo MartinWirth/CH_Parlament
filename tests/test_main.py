@@ -15,3 +15,12 @@ def test_social_media():
     from app.main import social_media
     assert social_media({"TwitterUrl": "https://x.com/example", "FacebookUrl": "javascript:alert(1)"}) == {"X": "https://x.com/example"}
     assert normalize({"FirstName": "Anna"})["socialmedia"] == {}
+
+
+def test_personal_handle_matches():
+    from app.main import personal_handle_matches
+    assert personal_handle_matches("https://www.instagram.com/anna.muster/", "Anna Muster")
+    assert personal_handle_matches("https://www.facebook.com/anna-muster", "Anna Muster")
+    assert not personal_handle_matches("https://www.instagram.com/spschweiz/", "Anna Muster")
+    assert not personal_handle_matches("https://example.org/anna-muster", "Anna Muster")
+    assert not personal_handle_matches("http://instagram.com/anna-muster", "Anna Muster")
