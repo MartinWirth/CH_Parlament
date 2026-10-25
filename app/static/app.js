@@ -4,7 +4,7 @@ const language=document.querySelector("#ui-language");
 function councilIndex(m){const code=String(m.rat_code??"").toUpperCase();if(code in councilCodes)return councilCodes[code];const name=String(m.rat||"").toLowerCase();for(const values of Object.values(councilNames)){const idx=values.findIndex(v=>v.toLowerCase()===name);if(idx>=0)return idx}return -1}
 function councilLabel(m){const i=councilIndex(m);return i<0?m.rat:councilNames[language.value][i]}
 const fields={rat:"Rat",partei:"Partei",kanton:"Kanton",fraktion:"Fraktion",geschlecht:"Geschlecht"};
-const cols={name:"Name",...fields,socialmedia:"Socialmedia"};let all=[],selected={},sortKey="name",descending=false;
+const cols={name:"Name",...fields,socialmedia:"Socialmedia"};let all=[],selected={},sortKey="name",descending=false,loadVersion=0;
 const filters=document.querySelector("#filters"),tbody=document.querySelector("#results"),status=document.querySelector("#status");
 const search=document.querySelector("#search");
 function buildFilters(){filters.replaceChildren();for(const [key,label] of Object.entries(fields)){const div=document.createElement("div");div.className="filter";const title=document.createElement("label");title.textContent=label;const select=document.createElement("select");select.multiple=true;select.setAttribute("aria-label",label+" mehrfach auswählen");select.title="Strg/Ctrl oder Cmd für Mehrfachauswahl";const values=key==="rat"?councilNames[language.value]:[...new Set(all.map(m=>m[key]).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"de"));for(const value of values){const option=document.createElement("option");option.value=key==="rat"?String(values.indexOf(value)):value;option.textContent=value;select.append(option)}select.addEventListener("change",()=>{selected[key]=[...select.selectedOptions].map(o=>o.value);render()});const hint=document.createElement("small");hint.textContent="Strg/Cmd für Mehrfachauswahl";div.append(title,select,hint);filters.append(div)}}
@@ -19,6 +19,7 @@ document.querySelector("#debug-clear").addEventListener("click",()=>{logBox.text
 debug("Frontend initialisiert");
 async function loadMembers(){
   const requested=language.value;
+  const version=++loadVersion;
   status.textContent="Lade Parlamentsdaten…";
   debug("GET /api/members gestartet",{language:requested});
   const started=performance.now();
@@ -27,13 +28,31 @@ async function loadMembers(){
     debug("HTTP Antwort",{status:r.status,ok:r.ok,duration_ms:Math.round(performance.now()-started)});
     if(!r.ok){const error=await r.json().catch(()=>({detail:r.statusText}));throw Error(error.detail||r.statusText)}
     const data=await r.json();
-    if(language.value!==requested)return;
+    if(language.value!==requested||version!==loadVersion)return;
     all=data.members||[];
     selected={};
     debug("API Daten empfangen",{members:all.length,backend:data.debug,data_language:data.data_language,first:all[0]||null});
     document.querySelector("#source").textContent="Quelle: "+data.source+" · Datensprache: "+data.data_language+" · Datenabruf: "+new Date(data.retrieved_at).toLocaleString("de-CH");
     buildFilters();render();
     debug("Tabelle gerendert",{rows:tbody.rows.length});
-  }catch(err){if(language.value!==requested)return;debug("FEHLER",{message:err.message});status.textContent="Daten konnten nicht geladen werden: "+err.message}
+    loadSocialProfiles(requested,version);
+  }catch(err){if(language.value!==requested||version!==loadVersion)return;debug("FEHLER",{message:err.message});status.textContent="Daten konnten nicht geladen werden: "+err.message}
+}
+async function loadSocialProfiles(requested,version){
+  debug("Social-Media-Abfrage gestartet",{language:requested});
+  const started=performance.now();
+  try{
+    const response=await fetch("/api/social-profiles?language="+encodeURIComponent(requested.toUpperCase()));
+    if(!response.ok)throw Error("HTTP "+response.status);
+    const data=await response.json();
+    if(version!==loadVersion||language.value!==requested)return;
+    let updated=0;
+    for(const member of all){
+      const links=data.profiles?.[member.id];
+      if(links&&Object.keys(links).length){member.socialmedia={...member.socialmedia,...links};updated++}
+    }
+    render();
+    debug("Social-Media-Abfrage abgeschlossen",{duration_ms:Math.round(performance.now()-started),updated_members:updated,backend:data.debug});
+  }catch(err){if(version===loadVersion)debug("Social-Media-Abfrage fehlgeschlagen",{message:err.message})}
 }
 loadMembers();
