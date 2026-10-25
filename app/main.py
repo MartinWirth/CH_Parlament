@@ -28,14 +28,14 @@ def normalize(row):
     last = pick(row, "LastName", "LastNameDe")
     name = pick(row, "FullName", "PersonName") or f"{first} {last}".strip()
     return {
-        "id": str(pick(row, "PersonNumber", "PersonId", "Id")),
+        "id": str(pick(row, "PersonNumber", "PersonId", "ID", "Id")),
         "name": name,
         "rat": str(pick(row, "CouncilName", "CouncilNameDe", "CouncilAbbreviation", "Council")),
         "partei": str(pick(row, "PartyAbbreviation", "PartyName", "PartyNameDe", "Party")),
         "kanton": str(pick(row, "CantonName", "CantonNameDe", "CantonAbbreviation", "Canton")),
         "fraktion": str(pick(row, "ParlGroupName", "ParlGroupNameDe", "ParlGroupAbbreviation", "ParlGroup")),
         "sprache": str(pick(row, "Language", "LanguageCode", "LanguageName")),
-        "geschlecht": str(pick(row, "Gender", "Sex")),
+        "geschlecht": str(pick(row, "GenderAsString", "Gender", "Sex")),
     }
 
 
@@ -46,10 +46,7 @@ def is_current(row):
         return active is True or str(active).lower() in ("true", "1")
     end = pick(row, "DateLeaving", "DateTo", "EndDate", "MembershipEndDate")
     if end:
-        try:
-            return str(end)[:10] >= datetime.now(timezone.utc).date().isoformat()
-        except (ValueError, TypeError):
-            return False
+        return False
     return True
 
 
@@ -62,7 +59,7 @@ async def fetch_members():
             if url in seen or len(seen) >= 30:
                 raise ValueError("API pagination loop or limit exceeded")
             seen.add(url)
-            response = await client.get(url, params={"$format": "json", "$top": 1000} if len(seen) == 1 else None)
+            response = await client.get(url, params={"$format": "json", "$filter": "Active eq true", "$top": 1000} if len(seen) == 1 else None)
             logger.info("API response page=%d status=%d bytes=%d", len(seen), response.status_code, len(response.content))
             response.raise_for_status()
             payload = response.json()
@@ -98,7 +95,7 @@ async def members():
     unique = {(item["id"], item["rat"]): item for item in result if item["name"]}
     logger.info("Members returned unique=%d", len(unique))
     return {
-        "debug": {"raw_count": len(rows), "current_count": len(result), "unique_count": len(unique), "sample_keys": list(rows[0].keys()) if rows else []},
+        "debug": {"raw_count": len(rows), "current_count": len(result), "unique_count": len(unique), "sample_keys": list(rows[0].keys()) if rows else [], "active_sample": [{"Active": r.get("Active"), "DateLeaving": r.get("DateLeaving")} for r in rows[:3]]},
         "source": "Parlamentsdienste der Bundesversammlung, Bern",
         "retrieved_at": datetime.now(timezone.utc).isoformat(),
         "members": sorted(unique.values(), key=lambda m: m["name"].casefold()),
