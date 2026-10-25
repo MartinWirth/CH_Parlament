@@ -24,3 +24,12 @@ def test_personal_handle_matches():
     assert not personal_handle_matches("https://www.instagram.com/spschweiz/", "Anna Muster")
     assert not personal_handle_matches("https://example.org/anna-muster", "Anna Muster")
     assert not personal_handle_matches("http://instagram.com/anna-muster", "Anna Muster")
+
+
+def test_fdp_roster_person_name_strips_office_titles():
+    from app.main import fdp_roster_person_name
+    assert fdp_roster_person_name("Cyril Aellen Nationalrat") == "Cyril Aellen"
+    assert fdp_roster_person_name("Bettina Balmer Nationalrätin") == "Bettina Balmer"
+    assert fdp_roster_person_name("Damien Cottier Ständerat") == "Damien Cottier"
+    assert fdp_roster_person_name("  Marcel Dobler   Nationalrat  ") == "Marcel Dobler"
+    assert fdp_roster_person_name("Andri Silberschmidt") == "Andri Silberschmidt"
