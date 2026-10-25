@@ -88,3 +88,24 @@ async function loadSocialProfiles(requested,version){
   await refreshSocialProfiles(requested,version,applyProfiles);
 }
 loadMembers();
+
+
+function exportAllMembers(){
+  const sources=["Parlament-Homepage","Partei-Homepage","Parlamentarier-Homepage"];
+  const platforms=["X","Facebook","Instagram","LinkedIn","YouTube"];
+  const headers=["PersonNumber","Name","Rat","Partei","Kanton","Fraktion","Geschlecht",...platforms.map(p=>"Socialmedia "+p),...sources.flatMap(src=>platforms.map(p=>src+" "+p))];
+  const records=all.map(m=>[m.id,m.name,councilLabel(m),m.partei,m.kanton,m.fraktion,m.geschlecht,...platforms.map(p=>m.socialmedia?.[p]||""),...sources.flatMap(src=>platforms.map(p=>m.socialmedia_by_source?.[src]?.[p]||""))]);
+  const quote=value=>String.fromCharCode(34)+String(value??"").replaceAll(String.fromCharCode(34),String.fromCharCode(34,34))+String.fromCharCode(34);
+  const csv=String.fromCharCode(65279)+[headers,...records].map(row=>row.map(quote).join(";")).join(String.fromCharCode(13,10));
+  const blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  const link=document.createElement("a");
+  link.href=url;
+  link.download="CH_Parlament_alle_"+language.value+".csv";
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  debug("Ungefilterte Liste exportiert",{members:records.length,columns:headers.length});
+}
+document.querySelector("#export-all").addEventListener("click",exportAllMembers);
