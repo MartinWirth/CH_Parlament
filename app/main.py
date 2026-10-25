@@ -539,12 +539,17 @@ async def discover_other_party_profiles(member_rows):
                     parser = SocialLinkParser()
                     parser.feed(response.text)
                     matches = {}
+                    fdp_profile_samples = []
                     for href in parser.links:
                         url = urljoin(roster_url, href)
                         parsed = urlparse(url)
                         if parsed.scheme != "https" or not parsed.hostname:
                             continue
                         on_party_site = parsed.hostname in (host, "www." + host)
+                        if group == "FDP" and on_party_site and "/members/user/" in parsed.path and len(fdp_profile_samples) < 15:
+                            sample = url.split("?", 1)[0].split("#", 1)[0]
+                            if sample not in fdp_profile_samples:
+                                fdp_profile_samples.append(sample)
                         if group == "Gruene":
                             # The Greens' parliamentary roster links directly to personal
                             # websites, not to individual pages on gruene.ch.
@@ -564,6 +569,8 @@ async def discover_other_party_profiles(member_rows):
                             matches[candidates[0]] = url.split("?", 1)[0].split("#", 1)[0]
                     discovered.update(matches)
                     report.update({"status": "parsed", "matched": len(matches), "links": len(parser.links)})
+                    if group == "FDP":
+                        report["profile_url_samples"] = fdp_profile_samples
                     diagnostics[group]["matched"] = len([number for number in discovered if number in {n for n, _ in members.get(group, [])}])
                     diagnostics[group]["status"] = "parsed"
                 except (httpx.HTTPError, ValueError) as exc:
