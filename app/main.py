@@ -338,7 +338,18 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                 return found
             current = url
             for _ in range(3):
-                async with client.stream("GET", current, follow_redirects=False) as response:
+                response = None
+                for attempt in range(3):
+                    try:
+                        response = await client.get(current, follow_redirects=False)
+                        break
+                    except (httpx.TimeoutException, httpx.ConnectError) as exc:
+                        if diagnostic is not None:
+                            diagnostic.setdefault("retry_errors", []).append(type(exc).__name__)
+                        if attempt == 2:
+                            raise
+                        await asyncio.sleep(0.25 * (attempt + 1))
+                if response is not None:
                     if diagnostic is not None:
                         diagnostic.update({"http_status": response.status_code, "final_url": current})
                     if response.status_code in (301, 302, 303, 307, 308):
@@ -360,13 +371,12 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                         if diagnostic is not None:
                             diagnostic["status"] = "http_error_or_not_html"
                         return found
-                    content = bytearray()
-                    async for chunk in response.aiter_bytes():
-                        content.extend(chunk)
-                        if len(content) > 300_000:
-                            if diagnostic is not None:
-                                diagnostic["status"] = "html_too_large"
-                            return found
+                    content = response.content
+                    if len(content) > 1_000_000:
+                        if diagnostic is not None:
+                            diagnostic["status"] = "html_too_large"
+                            diagnostic["html_bytes"] = len(content)
+                        return found
                 parser = SocialLinkParser()
                 html_text = content.decode("utf-8", errors="replace")
                 parser.feed(html_text)
@@ -431,7 +441,7 @@ async def homepage_profiles(communications, member_names=None):
     # Inspect raw social URLs as well: many personal sites embed their links in
     # script data rather than anchors. Accept extras only with a surname match.
     diagnostics = [{} for _ in homepages]
-    async with httpx.AsyncClient(timeout=5, trust_env=False, headers={"User-Agent": "CH-Parlament/1.0"}) as client:
+    async with httpx.AsyncClient(timeout=8, trust_env=False, headers={"User-Agent": "CH-Parlament/1.0"}) as client:
         results = await asyncio.gather(*(scan_homepage(client, url, semaphore, diagnostics[i]) for i, url in enumerate(homepages.values())))
     enriched = {}
     for (number, _), links, diagnostic in zip(homepages.items(), results, diagnostics):
