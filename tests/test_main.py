@@ -49,3 +49,28 @@ def test_social_parser_twitter_creator_metadata():
     parser = SocialLinkParser()
     parser.feed('<meta name="twitter:creator" content="@exampleperson">')
     assert "https://twitter.com/exampleperson" in parser.links
+
+
+def test_homepage_redirect_normalization():
+    from app.main import canonical_homepage_url, same_site_www_redirect
+    assert canonical_homepage_url("https://www.barbaraschaffner.ch/") == "https://www.barbaraschaffner.ch/"
+    assert canonical_homepage_url("https://barbaraschaffner.ch/") == "https://barbaraschaffner.ch/"
+    assert same_site_www_redirect("www.barbaraschaffner.ch", "barbaraschaffner.ch")
+    assert canonical_homepage_url("https://müller.ch/path") == "https://xn--mller-kva.ch/path"
+
+
+def test_homepage_redirect_rejects_invalid_authority():
+    import pytest
+    from app.main import canonical_homepage_url
+    for url in ("https://[not-ipv6]/", "https://user:pass@example.ch/", "http://example.ch/", "https://example.ch:444/"):
+        with pytest.raises(ValueError):
+            canonical_homepage_url(url)
+
+
+def test_cross_domain_redirect_requires_explicit_approval(monkeypatch):
+    from app.main import approved_homepage_redirect
+    monkeypatch.delenv("APPROVED_HOMEPAGE_REDIRECTS", raising=False)
+    assert not approved_homepage_redirect("example.ch", "evil.ch")
+    monkeypatch.setenv("APPROVED_HOMEPAGE_REDIRECTS", '{"example.ch":"new-example.ch"}')
+    assert approved_homepage_redirect("example.ch", "new-example.ch")
+    assert not approved_homepage_redirect("example.ch", "new-example.ch.evil.org")
