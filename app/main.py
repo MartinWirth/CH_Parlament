@@ -3,6 +3,7 @@ from pathlib import Path
 import os
 import logging
 import time
+from urllib.parse import urlparse
 import httpx
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
@@ -23,6 +24,19 @@ def pick(row, *keys):
     return ""
 
 
+def social_media(row):
+    platforms = {"X": ("TwitterUrl", "TwitterURL", "XUrl"), "Facebook": ("FacebookUrl", "FacebookURL"), "Instagram": ("InstagramUrl", "InstagramURL"), "LinkedIn": ("LinkedInUrl", "LinkedinUrl"), "YouTube": ("YouTubeUrl", "YoutubeUrl")}
+    links = {}
+    for name, keys in platforms.items():
+        url = pick(row, *keys)
+        if isinstance(url, str):
+            url = url.strip()
+            parsed = urlparse(url)
+            if parsed.scheme == "https" and parsed.netloc and not parsed.username and not parsed.password:
+                links[name] = url
+    return links
+
+
 def normalize(row):
     first = pick(row, "FirstName", "FirstNameDe")
     last = pick(row, "LastName", "LastNameDe")
@@ -36,6 +50,7 @@ def normalize(row):
         "kanton": str(pick(row, "CantonName", "CantonNameDe", "CantonAbbreviation", "Canton")),
         "fraktion": str(pick(row, "ParlGroupName", "ParlGroupNameDe", "ParlGroupAbbreviation", "ParlGroup")),
         "geschlecht": str(pick(row, "GenderAsString", "Gender", "Sex")),
+        "socialmedia": social_media(row),
     }
 
 
@@ -95,7 +110,7 @@ async def members(language: str = Query("DE", pattern="^(DE|FR|IT|RM)$")):
     unique = {(item["id"], item["rat"]): item for item in result if item["name"]}
     logger.info("Members returned unique=%d", len(unique))
     return {
-        "debug": {"raw_count": len(rows), "current_count": len(result), "unique_count": len(unique), "sample_keys": list(rows[0].keys()) if rows else [], "active_sample": [{"Active": r.get("Active"), "DateLeaving": r.get("DateLeaving")} for r in rows[:3]]},
+        "debug": {"raw_count": len(rows), "current_count": len(result), "unique_count": len(unique), "sample_keys": list(rows[0].keys()) if rows else [], "active_sample": [{"Active": r.get("Active"), "DateLeaving": r.get("DateLeaving")} for r in rows[:3]], "social_profiles": sum(bool(m["socialmedia"]) for m in unique.values())},
         "data_language": language,
         "source": "Parlamentsdienste der Bundesversammlung, Bern",
         "retrieved_at": datetime.now(timezone.utc).isoformat(),
