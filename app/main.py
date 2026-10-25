@@ -194,8 +194,11 @@ class SocialLinkParser(HTMLParser):
             self.links.append(attrs["href"])
         elif tag == "link" and "me" in attrs.get("rel", "").lower().split() and attrs.get("href"):
             self.links.append(attrs["href"])
-        elif tag == "meta" and attrs.get("property", "").lower() in ("og:see_also", "article:author") and attrs.get("content"):
-            self.links.append(attrs["content"])
+        elif tag == "meta" and (attrs.get("property", "") or attrs.get("name", "")).lower() in ("og:see_also", "article:author", "twitter:creator", "twitter:site", "fediverse:creator") and attrs.get("content"):
+            value = attrs["content"].strip()
+            if value.startswith("@") and (attrs.get("property", "") or attrs.get("name", "")).lower().startswith("twitter:"):
+                value = "https://twitter.com/" + value[1:]
+            self.links.append(value)
         elif tag == "script" and attrs.get("type", "").lower() == "application/ld+json":
             self._json_ld = True
             self._json_chunks = []
@@ -308,6 +311,16 @@ def public_hostname(host):
         return False
 
 
+def same_site_www_redirect(original_host, target_host):
+    """Only allow exact hostnames differing by the optional www prefix."""
+    if not original_host or not target_host:
+        return False
+    def bare(host):
+        host = host.lower().rstrip(".")
+        return host[4:] if host.startswith("www.") else host
+    return bare(original_host) == bare(target_host)
+
+
 async def scan_homepage(client, url, semaphore, diagnostic=None):
     now = time.time()
     cached = _homepage_cache.get(url)
@@ -333,9 +346,13 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                         parsed = urlparse(target)
                         if diagnostic is not None:
                             diagnostic["redirects"].append(target)
-                        if parsed.scheme != "https" or parsed.hostname != original.hostname or parsed.port not in (None, 443) or parsed.username or parsed.password:
+                        if parsed.scheme != "https" or not same_site_www_redirect(original.hostname, parsed.hostname) or parsed.port not in (None, 443) or parsed.username or parsed.password:
                             if diagnostic is not None:
                                 diagnostic["status"] = "redirect_blocked"
+                            return found
+                        if not await asyncio.to_thread(public_hostname, parsed.hostname):
+                            if diagnostic is not None:
+                                diagnostic["status"] = "redirect_hostname_not_public"
                             return found
                         current = target
                         continue
@@ -366,8 +383,8 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                     diagnostic["parser"] = dict(parser.link_diagnostics)
                     diagnostic["parser"]["candidate_urls"] = len(parser.links) + len(list(parser.social_references()))
                 candidate_links = list(parser.links) + list(parser.social_references())
+                candidate_links += raw_social
                 if diagnostic is not None:
-                    candidate_links += raw_social
                     diagnostic["social_url_candidates"] = []
                 for href in candidate_links:
                     target = urljoin(current, href)
