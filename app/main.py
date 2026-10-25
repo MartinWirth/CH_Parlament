@@ -30,6 +30,7 @@ def normalize(row):
     return {
         "id": str(pick(row, "PersonNumber", "PersonId", "ID", "Id")),
         "name": name,
+        "rat_code": str(pick(row, "Council", "CouncilAbbreviation")),
         "rat": str(pick(row, "CouncilName", "CouncilNameDe", "CouncilAbbreviation", "Council")),
         "partei": str(pick(row, "PartyAbbreviation", "PartyName", "PartyNameDe", "Party")),
         "kanton": str(pick(row, "CantonName", "CantonNameDe", "CantonAbbreviation", "Canton")),
