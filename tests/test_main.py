@@ -74,3 +74,14 @@ def test_cross_domain_redirect_requires_explicit_approval(monkeypatch):
     monkeypatch.setenv("APPROVED_HOMEPAGE_REDIRECTS", '{"example.ch":"new-example.ch"}')
     assert approved_homepage_redirect("example.ch", "new-example.ch")
     assert not approved_homepage_redirect("example.ch", "new-example.ch.evil.org")
+
+
+def test_party_personal_handle_swiss_transliteration():
+    from app.main import party_personal_handle_matches
+    assert party_personal_handle_matches("https://www.instagram.com/bmuehlemann/", "Benjamin Mühlemann")
+    assert party_personal_handle_matches("https://x.com/Damian_Mueller_/", "Damian Müller")
+    assert party_personal_handle_matches("https://www.facebook.com/damian.mueller/", "Damian Müller")
+    assert party_personal_handle_matches("https://www.instagram.com/benjamin-m%C3%BChlemann/", "Benjamin Mühlemann")
+    assert not party_personal_handle_matches("https://www.instagram.com/fdp_schweiz/", "Benjamin Mühlemann")
+    assert not party_personal_handle_matches("https://www.facebook.com/fdp.dieliberalen/", "Damian Müller")
+    assert not party_personal_handle_matches("https://www.instagram.com/other_person/", "Damian Müller")
