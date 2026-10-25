@@ -176,13 +176,14 @@ class SocialLinkParser(HTMLParser):
         self.json_documents = []
         self._json_ld = False
         self._json_chunks = []
-        self._excluded_depth = 0
+        self._excluded_tags = []
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
-        if tag in ("footer", "nav") or (tag in ("div", "section") and any(word in (attrs.get("class", "")+" "+attrs.get("id", "")).lower().split() for word in ("footer", "site-footer", "main-footer"))):
-            self._excluded_depth += 1
-        if self._excluded_depth:
+        excluded = tag in ("footer", "nav") or (tag in ("div", "section") and any(word in (attrs.get("class", "")+" "+attrs.get("id", "")).lower().split() for word in ("footer", "site-footer", "main-footer")))
+        if self._excluded_tags or excluded:
+            if tag not in ("meta", "link", "img", "input", "br", "hr", "source", "area"):
+                self._excluded_tags.append(tag)
             return
         if tag == "a" and attrs.get("href"):
             self.links.append(attrs["href"])
@@ -199,8 +200,10 @@ class SocialLinkParser(HTMLParser):
             self._json_chunks.append(data)
 
     def handle_endtag(self, tag):
-        if self._excluded_depth and tag in ("footer", "nav", "div", "section"):
-            self._excluded_depth -= 1
+        if self._excluded_tags:
+            if tag == self._excluded_tags[-1]:
+                self._excluded_tags.pop()
+            return
         if tag == "script" and self._json_ld:
             self._json_ld = False
             try:
