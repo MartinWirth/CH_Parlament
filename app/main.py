@@ -555,6 +555,14 @@ async def discover_other_party_profiles(member_rows):
         group = "FDP" if party in ("FDP", "PLR") else "SVP" if party in ("SVP", "UDC") else "Mitte" if party in ("M-E", "MITTE", "CVP", "PDC") else "Gruene" if party in ("GPS", "PES", "GRÜNE", "GRUENE") else None
         if group:
             members.setdefault(group, []).append((str(pick(row, "PersonNumber")), name))
+    # FDP abbreviations vary across Parliament API records. A unique full-name
+    # match against all active members is safer than guessing another party code.
+    active_members_by_key = {}
+    for row in member_rows:
+        if is_current(row):
+            active_members_by_key.setdefault(key(normalize(row)["name"]), []).append(
+                (str(pick(row, "PersonNumber")), normalize(row)["name"])
+            )
     discovered, diagnostics = {}, {}
     async with httpx.AsyncClient(timeout=8, trust_env=False, follow_redirects=False) as client:
         for group, roster_list in rosters.items():
@@ -584,7 +592,9 @@ async def discover_other_party_profiles(member_rows):
                             if len(modal_samples) < 12:
                                 modal_samples.append({"url": urljoin(roster_url, href)[:400], "label": label[:100]})
                             clean_name = fdp_roster_person_name(label)
-                            candidates = [number for number, name in members.get(group, []) if key(name) == key(clean_name)]
+                            candidate_records = active_members_by_key.get(key(clean_name), [])
+                            candidates = [number for number, name in candidate_records]
+                            candidate_names = [name for number, name in candidate_records]
                             if len(candidates) == 1:
                                 matches[candidates[0]] = urljoin(roster_url, href)
                             if len(match_diagnostics) < 20:
@@ -593,7 +603,7 @@ async def discover_other_party_profiles(member_rows):
                                     "clean_name": clean_name[:100],
                                     "normalized_key": key(clean_name),
                                     "candidate_count": len(candidates),
-                                    "candidate_names": [name for number, name in members.get(group, []) if key(name) == key(clean_name)][:3],
+                                    "candidate_names": candidate_names[:3],
                                     "reason": "matched" if len(candidates) == 1 else "ambiguous" if candidates else "no_exact_name_match",
                                 })
                         report["modal_match_diagnostics"] = match_diagnostics
