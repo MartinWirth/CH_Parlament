@@ -709,6 +709,13 @@ def fdp_roster_person_name(label):
     return re.sub(r"\s+" + office + r"(?:\s+.*)?$", "", label, flags=re.IGNORECASE).strip()
 
 
+def evp_member_candidates(profile_key, active_members_by_key):
+    """Resolve only explicitly verified EVP public-name aliases."""
+    aliases = {"nikgugger": "niklaussamuelgugger"}
+    canonical = aliases.get(profile_key, profile_key)
+    return active_members_by_key.get(canonical, [])
+
+
 async def discover_other_party_profiles(member_rows):
     """Match official party roster links to active members, without guessing URLs."""
     rosters = {
@@ -825,7 +832,7 @@ async def discover_other_party_profiles(member_rows):
                                 evp_samples.append({"url": url[:300], "path_key": path_key})
                             if path_key.startswith("nr"):
                                 path_key = path_key[2:]
-                            candidate_records = active_members_by_key.get(path_key, [])
+                            candidate_records = evp_member_candidates(path_key, active_members_by_key)
                             if len(evp_match_diagnostics) < 20:
                                 evp_match_diagnostics.append({
                                     "url": url[:300], "normalized_key": path_key,
