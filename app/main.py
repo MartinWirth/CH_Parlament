@@ -185,6 +185,51 @@ async def members(language: str = Query("DE", pattern="^(DE|FR|IT|RM)$")):
     }
 
 
+@app.get("/api/person-communications-diagnostic")
+async def person_communications_diagnostic(person_number: int = Query(4100, ge=1)):
+    """Compare the direct collection with the OData Person navigation property."""
+    base = API.rstrip("/")
+    urls = {
+        "direct": f"{base}/PersonCommunication?$format=json&$top=2",
+        "person": f"{base}/Person?$format=json&$filter=PersonNumber%20eq%20{person_number}%20and%20Language%20eq%20'DE'&$top=1",
+        "navigation": f"{base}/PersonCommunications",
+    }
+    result = {}
+    async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+        for name in ("direct", "person"):
+            try:
+                response = await client.get(urls[name])
+                response.raise_for_status()
+                payload = response.json()
+                data = payload.get("d", payload)
+                rows = data.get("results", []) if isinstance(data, dict) else []
+                result[name] = {"status": response.status_code, "count": len(rows), "keys": list(rows[0]) if rows else []}
+                if name == "person" and rows:
+                    person = rows[0]
+                    nav = person.get("PersonCommunications")
+                    uri = nav.get("__deferred", {}).get("uri") if isinstance(nav, dict) else None
+                    if uri:
+                        urls["navigation"] = uri
+            except (httpx.HTTPError, ValueError, TypeError) as exc:
+                result[name] = {"error": str(exc)[:250]}
+        if urls["navigation"].endswith("/PersonCommunications"):
+            result["navigation"] = {"error": "No PersonCommunications navigation URI found on Person"}
+        else:
+            try:
+                response = await client.get(urls["navigation"], params={"$format": "json"})
+                response.raise_for_status()
+                payload = response.json()
+                data = payload.get("d", payload)
+                rows = data.get("results", []) if isinstance(data, dict) else []
+                result["navigation"] = {
+                    "status": response.status_code, "count": len(rows),
+                    "sample": [{"Language": x.get("Language"), "CommunicationType": x.get("CommunicationType"), "CommunicationTypeText": x.get("CommunicationTypeText"), "address_domain": (urlparse(x.get("Address") or "").hostname or "")} for x in rows[:10]]
+                }
+            except (httpx.HTTPError, ValueError, TypeError) as exc:
+                result["navigation"] = {"error": str(exc)[:250]}
+    return {"person_number": person_number, "results": result}
+
+
 @app.get("/api/odata-schema")
 async def odata_schema():
     """Inspect actual OData entity sets and person-related fields without guessing names."""
