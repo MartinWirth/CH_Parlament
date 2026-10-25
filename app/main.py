@@ -94,21 +94,28 @@ async def fetch_members(language="DE"):
 
 
 async def fetch_communications(language):
-    """Read public person communications; failure must not block the member list."""
+    """Read OData communications without an unverified server-side language filter."""
     url = f"{API.rstrip('/')}/PersonCommunication"
+    rows, seen = [], set()
     try:
         async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
-            response = await client.get(url, params={"$format": "json", "$filter": f"Language eq '{language}'", "$top": 1000})
-            response.raise_for_status()
-            payload = response.json()
-            data = payload.get("d", payload)
-            rows = data.get("results", []) if isinstance(data, dict) and "results" in data else data.get("value", []) if isinstance(data, dict) else []
-            logger.info("PersonCommunication rows=%d sample_keys=%s", len(rows), list(rows[0]) if rows else [])
-            return rows
+            while url and len(seen) < 30:
+                if url in seen:
+                    break
+                seen.add(url)
+                response = await client.get(url, params={"$format": "json", "$top": 1000} if len(seen) == 1 else None)
+                response.raise_for_status()
+                payload = response.json()
+                data = payload.get("d", payload)
+                page = data.get("results", []) if isinstance(data, dict) and "results" in data else data.get("value", []) if isinstance(data, dict) else []
+                rows.extend(page)
+                next_url = data.get("__next") or data.get("@odata.nextLink") if isinstance(data, dict) else None
+                url = str(httpx.URL(url).join(next_url)) if next_url else None
+        logger.info("PersonCommunication rows=%d sample_keys=%s", len(rows), list(rows[0]) if rows else [])
+        return [row for row in rows if str(row.get("Language", "")).upper() == language]
     except (httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
         logger.warning("PersonCommunication unavailable: %s", exc)
         return []
-
 
 def communication_profiles(rows):
     """Match only explicit social-network URLs and a person number."""
@@ -124,7 +131,7 @@ def communication_profiles(rows):
         number = pick(row, "PersonNumber")
         if not number:
             continue
-        for key in ("Value", "Communication", "Address", "Url", "URL", "CommunicationValue", "Contact"):
+        for key in ("Address",):
             value = row.get(key)
             if not isinstance(value, str):
                 continue
