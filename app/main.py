@@ -346,6 +346,52 @@ async def homepage_profiles(communications):
     return {number: links for number, links in zip(homepages, results) if links}, len(homepages)
 
 
+_party_sources_path = Path(os.getenv("PARTY_PROFILE_SOURCES", str(ROOT.parent / "party_profile_sources.json")))
+
+def configured_party_profiles(member_rows):
+    """Only accept manually verified person-specific party profile URLs."""
+    try:
+        entries = json.loads(_party_sources_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}, {"configured": 0, "accepted": 0, "rejected": 0}
+    if not isinstance(entries, list):
+        return {}, {"configured": 0, "accepted": 0, "rejected": 0}
+    members = {str(pick(row, "PersonNumber")): row for row in member_rows if is_current(row)}
+    accepted = {}
+    rejected = 0
+    for entry in entries:
+        if not isinstance(entry, dict):
+            rejected += 1
+            continue
+        number = str(entry.get("person_number", ""))
+        member = members.get(number)
+        if not member or entry.get("verified") is not True:
+            rejected += 1
+            continue
+        expected = normalize(member)["name"].casefold().strip()
+        supplied = str(entry.get("name", "")).casefold().strip()
+        page = homepage_url(entry.get("profile_url"))
+        if not expected or expected != supplied or not page:
+            rejected += 1
+            continue
+        if number in accepted:
+            rejected += 1
+            continue
+        accepted[number] = page
+    return accepted, {"configured": len(entries), "accepted": len(accepted), "rejected": rejected}
+
+
+async def party_profile_links(member_rows):
+    sources, diagnostic = configured_party_profiles(member_rows)
+    if not sources:
+        return {}, diagnostic
+    semaphore = asyncio.Semaphore(8)
+    async with httpx.AsyncClient(timeout=5, trust_env=False, headers={"User-Agent": "CH-Parlament/1.0"}) as client:
+        results = await asyncio.gather(*(scan_homepage(client, url, semaphore) for url in sources.values()))
+    save_homepage_cache()
+    return {number: links for number, links in zip(sources, results) if links}, diagnostic
+
+
 @app.get("/")
 def index():
     return FileResponse(ROOT / "static" / "index.html")
@@ -406,6 +452,14 @@ async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|I
     ids = {str(pick(row, "PersonNumber")) for row in rows if is_current(row)}
     communications, diagnostic = await fetch_communications(language, ids)
     profiles, homepages = await homepage_profiles(communications)
+    party_links, party_diagnostic = await party_profile_links(rows)
+    party_added = 0
+    for number, links in party_links.items():
+        existing = profiles.setdefault(number, {})
+        if not existing:
+            party_added += 1
+        for platform, url in links.items():
+            existing.setdefault(platform, url)
     member_homepages = {str(row.get("PersonNumber")) for row in communications if str(row.get("CommunicationTypeText", "")).lower() in ("homepage", "page d'accueil", "sito internet") and homepage_url(row.get("Address"))}
     missing = {
         "members_total": len(ids),
@@ -416,7 +470,7 @@ async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|I
         "members_without_social_profiles": len(ids - set(profiles)),
     }
     platforms = {platform: sum(platform in links for links in profiles.values()) for platform in _social_domains}
-    data = {"profiles": profiles, "updated_at": datetime.now(timezone.utc).isoformat(), "cached": False, "debug": {"coverage": missing, "platforms": platforms, "homepages_checked": homepages, "homepage_profiles": len(profiles), "communication_count": len(communications), "communication_error": diagnostic.get("error")}}
+    data = {"profiles": profiles, "updated_at": datetime.now(timezone.utc).isoformat(), "cached": False, "debug": {"party_sources": party_diagnostic, "party_members_added": party_added, "coverage": missing, "platforms": platforms, "homepages_checked": homepages, "homepage_profiles": len(profiles), "communication_count": len(communications), "communication_error": diagnostic.get("error")}}
     snapshot = read_profile_snapshot()
     snapshot[language] = data
     save_profile_snapshot(snapshot)
