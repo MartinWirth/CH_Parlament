@@ -716,7 +716,12 @@ async def discover_other_party_profiles(member_rows):
         "SVP": [("https://www.svp.ch/menschen/personen/", "svp.ch", "/menschen/portrait/")],
         "Mitte": [("https://die-mitte.ch/die-mitte/menschen/", "die-mitte.ch", "/")],
         "Gruene": [("https://gruene.ch/gruene-im-bundeshaus", "gruene.ch", "/")],
-        "GLP": [("https://glp.swiss/position-person/nationalrat/", "glp.swiss", "/personen/")],
+        "GLP": [
+            ("https://glp.swiss/position-person/nationalrat/", "glp.swiss", "/personen/"),
+            ("https://glp.swiss/partei/menschen/praesidium-geschaeftsleitung/", "glp.swiss", "/personen/"),
+            ("https://zh.glp.swiss/partei/menschen/mandatstraeger-innen/", "zh.glp.swiss", "/personen/"),
+            ("https://be.glp.swiss/partei/menschen/mandatstraeger-innen/", "be.glp.swiss", "/personen/"),
+        ],
     }
     def key(value):
         return "".join(c for c in unicodedata.normalize("NFKD", value.casefold()) if c.isascii() and c.isalnum())
@@ -788,7 +793,7 @@ async def discover_other_party_profiles(member_rows):
                         parsed = urlparse(url)
                         if parsed.scheme != "https" or not parsed.hostname:
                             continue
-                        on_party_site = parsed.hostname in (host, "www." + host)
+                        on_party_site = parsed.hostname in (host, "www." + host) or (group == "GLP" and parsed.hostname.endswith(".glp.swiss"))
                         if group == "FDP" and on_party_site and "/members/user/" in parsed.path and len(fdp_profile_samples) < 15:
                             sample = url.split("?", 1)[0].split("#", 1)[0]
                             if sample not in fdp_profile_samples:
