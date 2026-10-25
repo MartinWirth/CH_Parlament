@@ -372,37 +372,34 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
             alternate_tried = set()
             for _ in range(3):
                 response = None
-                for attempt in range(3):
+                # Fail fast for persistent connection errors. Retry only once on
+                # certificate hostname mismatch using the verified alternate host.
+                for attempt in range(2):
                     try:
                         stage = "http_get"
                         response = await client.get(current, follow_redirects=False)
                         break
                     except httpx.ConnectError as exc:
-                        # Retry only a certificate-related failure, never bypass TLS.
-                        certificate_error = "certificate" in str(exc).lower() or "hostname mismatch" in str(exc).lower()
+                        if diagnostic is not None:
+                            diagnostic.setdefault("retry_errors", []).append(type(exc).__name__)
+                        detail = str(exc).lower()
+                        certificate_error = "certificate" in detail or "hostname mismatch" in detail
                         parsed_current = urlparse(current)
                         host = parsed_current.hostname or ""
                         alternate_host = host[4:] if host.startswith("www.") else "www." + host
-                        alternate = None
-                        if certificate_error and host and same_site_www_redirect(host, alternate_host):
-                            alternate = canonical_homepage_url(urlunparse(parsed_current._replace(netloc=alternate_host)))
-                        if alternate and alternate not in alternate_tried and await asyncio.to_thread(public_hostname, alternate_host):
-                            alternate_tried.add(alternate)
-                            if diagnostic is not None:
-                                diagnostic.setdefault("tls_fallbacks", []).append({"from": current, "to": alternate, "reason": "certificate_validation_failed"})
-                            current = alternate
-                            continue
-                        if diagnostic is not None:
-                            diagnostic.setdefault("retry_errors", []).append(type(exc).__name__)
-                        if attempt == 2:
+                        if not certificate_error or attempt > 0 or not same_site_www_redirect(host, alternate_host):
                             raise
-                        await asyncio.sleep(0.2)
+                        alternate = canonical_homepage_url(urlunparse(parsed_current._replace(netloc=alternate_host)))
+                        if alternate in alternate_tried or not await asyncio.to_thread(public_hostname, alternate_host):
+                            raise
+                        alternate_tried.add(alternate)
+                        if diagnostic is not None:
+                            diagnostic.setdefault("tls_fallbacks", []).append({"from": current, "to": alternate, "reason": "certificate_validation_failed"})
+                        current = alternate
                     except httpx.TimeoutException as exc:
                         if diagnostic is not None:
                             diagnostic.setdefault("retry_errors", []).append(type(exc).__name__)
-                        if attempt == 2:
-                            raise
-                        await asyncio.sleep(0.2)
+                        raise
                 if response is None:
                     if diagnostic is not None:
                         diagnostic["status"] = "tls_fallback_failed"
