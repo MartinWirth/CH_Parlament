@@ -392,7 +392,17 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
         return found
 
 
-async def homepage_profiles(communications):
+def personal_handle_matches(url, person_name):
+    """Conservative fallback for links embedded in homepage scripts or markup."""
+    if not verified_social_url(url) or not person_name:
+        return False
+    def key(value):
+        return "".join(ch for ch in unicodedata.normalize("NFKD", value.casefold()) if ch.isascii() and ch.isalnum())
+    surname = key(person_name.split()[-1])
+    return len(surname) >= 4 and surname in key(urlparse(url).path)
+
+
+async def homepage_profiles(communications, member_names=None):
     homepages = {}
     for row in communications:
         if str(row.get("CommunicationTypeText", "")).lower() not in ("homepage", "page d'accueil", "sito internet"):
@@ -401,11 +411,22 @@ async def homepage_profiles(communications):
         if url:
             homepages.setdefault(str(row.get("PersonNumber")), url)
     semaphore = asyncio.Semaphore(8)
+    # Inspect raw social URLs as well: many personal sites embed their links in
+    # script data rather than anchors. Accept extras only with a surname match.
+    diagnostics = [{} for _ in homepages]
     async with httpx.AsyncClient(timeout=5, trust_env=False, headers={"User-Agent": "CH-Parlament/1.0"}) as client:
-        tasks = [scan_homepage(client, url, semaphore) for url in homepages.values()]
-        results = await asyncio.gather(*tasks)
+        results = await asyncio.gather(*(scan_homepage(client, url, semaphore, diagnostics[i]) for i, url in enumerate(homepages.values())))
+    enriched = {}
+    for (number, _), links, diagnostic in zip(homepages.items(), results, diagnostics):
+        combined = dict(links)
+        for candidate in diagnostic.get("raw_social_urls", []):
+            platform = verified_social_url(candidate)
+            if platform and platform not in combined and personal_handle_matches(candidate, (member_names or {}).get(number, "")):
+                combined[platform] = candidate
+        if combined:
+            enriched[number] = combined
     save_homepage_cache()
-    return {number: links for number, links in zip(homepages, results) if links}, len(homepages)
+    return enriched, len(homepages)
 
 
 _party_sources_path = Path(os.getenv("PARTY_PROFILE_SOURCES", str(ROOT.parent / "party_profile_sources.json")))
@@ -555,7 +576,7 @@ async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|I
     rows = await fetch_members(language)
     ids = {str(pick(row, "PersonNumber")) for row in rows if is_current(row)}
     communications, diagnostic = await fetch_communications(language, ids)
-    profiles, homepages = await homepage_profiles(communications)
+    profiles, homepages = await homepage_profiles(communications, {str(pick(row, "PersonNumber")): normalize(row)["name"] for row in rows if is_current(row)})
     personal_profiles = {number: dict(links) for number, links in profiles.items()}
     parliament_profiles = communication_profiles(communications)
     party_links, party_diagnostic = await party_profile_links(rows)
