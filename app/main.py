@@ -361,6 +361,20 @@ def approved_homepage_redirect(source_host, target_host):
         return False
 
 
+def bounded_homepage_html(content, diagnostic=None):
+    """Return at most 1 MB of HTML; reject responses larger than 3 MB."""
+    if len(content) > 3_000_000:
+        if diagnostic is not None:
+            diagnostic.update({"status": "html_too_large", "html_bytes": len(content)})
+        return None
+    if len(content) > 1_000_000:
+        if diagnostic is not None:
+            diagnostic.update({"html_bytes": len(content), "html_truncated_for_parsing": True,
+                               "parsed_html_bytes": 1_000_000})
+        return content[:1_000_000]
+    return content
+
+
 async def scan_homepage(client, url, semaphore, diagnostic=None):
     now = time.time()
     cached = _homepage_cache.get(url)
@@ -455,19 +469,9 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                             diagnostic["status"] = "http_error_or_not_html"
                         return found
                     content = response.content
-                    # Parse a bounded prefix of moderately oversized pages.
-                    # Keep a hard response-size ceiling; never parse unbounded HTML.
-                    if len(content) > 3_000_000:
-                        if diagnostic is not None:
-                            diagnostic["status"] = "html_too_large"
-                            diagnostic["html_bytes"] = len(content)
+                    content = bounded_homepage_html(content, diagnostic)
+                    if content is None:
                         return found
-                    if len(content) > 1_000_000:
-                        if diagnostic is not None:
-                            diagnostic["html_bytes"] = len(content)
-                            diagnostic["html_truncated_for_parsing"] = True
-                            diagnostic["parsed_html_bytes"] = 1_000_000
-                        content = content[:1_000_000]
                 stage = "parse_html"
                 parser = SocialLinkParser()
                 html_text = content.decode("utf-8", errors="replace")
