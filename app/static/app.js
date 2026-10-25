@@ -29,21 +29,28 @@ debugPhaseButton.addEventListener("click",()=>{
   if(debugPhase&&all.length)document.querySelector("#social-refresh").click();
 });
 function debug(message,data){const line=new Date().toISOString()+" "+message+(data===undefined?"":" "+JSON.stringify(data));console.info("[CH_Parlament]",line);logBox.textContent+=line+"\n";logBox.scrollTop=logBox.scrollHeight}
-async function copyDebugLog(){
-  // Focus the visible log before requesting clipboard access.
+const debugCopyStatus=document.querySelector("#debug-copy-status");
+function showDebugLog(){
   logBox.hidden=false;
-  if(!logBox.hasAttribute("tabindex"))logBox.tabIndex=0;
+  logBox.tabIndex=0;
   logBox.focus({preventScroll:true});
   logBox.scrollTop=logBox.scrollHeight;
+  document.querySelector("#debug-toggle").textContent="Debug-Log ausblenden";
+}
+async function copyDebugLog(){
+  showDebugLog();
   try{
     await navigator.clipboard.writeText(logBox.textContent);
-    console.info("[CH_Parlament] Debug-Log in Zwischenablage kopiert");
+    debugCopyStatus.textContent="Debug-Log kopiert.";
   }catch(err){
-    console.warn("[CH_Parlament] Automatisches Kopieren nicht möglich",err);
-    debug("Zwischenablage: Kopieren blockiert; Browserfenster aktivieren und Debug-Log anzeigen erneut klicken",{message:err.message});
+    debugCopyStatus.textContent="Kopieren blockiert. Browserfenster aktivieren und erneut klicken.";
+    console.warn("[CH_Parlament] Zwischenablage nicht verfügbar",err);
   }
 }
-document.querySelector("#debug-toggle").addEventListener("click",async e=>{logBox.hidden=!logBox.hidden;e.target.textContent=logBox.hidden?"Debug-Log anzeigen":"Debug-Log ausblenden";if(!logBox.hidden)await copyDebugLog()});
+document.querySelector("#debug-copy").addEventListener("click",copyDebugLog);
+document.querySelector("#debug-toggle").addEventListener("click",e=>{
+  if(logBox.hidden){showDebugLog()}else{logBox.hidden=true;e.target.textContent="Debug-Log anzeigen"}
+});
 document.querySelector("#debug-clear").addEventListener("click",()=>{logBox.textContent=""});
 debug("Frontend initialisiert");
 async function loadMembers(){
@@ -83,7 +90,7 @@ async function refreshSocialProfiles(requested,version,applyProfiles){
     applyProfiles(await response.json(),"aktualisiert");
     if(version===loadVersion)debug("Social-Media-Aktualisierung abgeschlossen",{duration_ms:Math.round(performance.now()-started)});
   }catch(err){if(version===loadVersion)debug("Social-Media-Aktualisierung fehlgeschlagen",{message:err.message})}
-  finally{socialRefreshInProgress=false;button.disabled=false;if(debugPhase&&version===loadVersion){logBox.hidden=false;document.querySelector("#debug-toggle").textContent="Debug-Log ausblenden";logBox.scrollTop=logBox.scrollHeight;copyDebugLog()}}
+  finally{socialRefreshInProgress=false;button.disabled=false;if(debugPhase&&version===loadVersion){logBox.hidden=false;document.querySelector("#debug-toggle").textContent="Debug-Log ausblenden";logBox.scrollTop=logBox.scrollHeight;logBox.tabIndex=0;logBox.focus({preventScroll:true});debugCopyStatus.textContent="Aktualisierung abgeschlossen. Zum Kopieren auf „Debug-Log kopieren“ klicken."}}
 }
 async function loadSocialProfiles(requested,version){
   const applyProfiles=(data,source)=>{
