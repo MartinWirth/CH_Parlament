@@ -341,13 +341,22 @@ def same_site_www_redirect(original_host, target_host):
 def approved_homepage_redirect(source_host, target_host):
     """Permit explicitly reviewed cross-domain moves only (never suffix matching)."""
     try:
+        # Verified public personal sites. Exact source -> target pairs only.
+        verified_pairs = {
+            "andrisilberschmidt.ch": "silberschmidt2027.ch",
+            "marc-jost.ch": "marcjost.ch",
+            "susanne-vincenz-stauffacher.ch": "vincenz-stauffacher.ch",
+        }
         pairs = json.loads(os.getenv("APPROVED_HOMEPAGE_REDIRECTS", "{}"))
         if not isinstance(pairs, dict):
             return False
         source = source_host.encode("idna").decode("ascii").lower().rstrip(".")
         target = target_host.encode("idna").decode("ascii").lower().rstrip(".")
+        def bare(host):
+            return host[4:] if host.startswith("www.") else host
         approved = pairs.get(source)
-        return isinstance(approved, str) and approved.lower().rstrip(".") == target
+        return (isinstance(approved, str) and approved.lower().rstrip(".") == target
+                or verified_pairs.get(bare(source)) == bare(target))
     except (ValueError, UnicodeError, AttributeError):
         return False
 
