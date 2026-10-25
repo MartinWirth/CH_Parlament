@@ -379,7 +379,18 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                     if diagnostic is not None:
                         diagnostic.update({"http_status": response.status_code, "final_url": current})
                     if response.status_code in (301, 302, 303, 307, 308):
-                        target = canonical_homepage_url(urljoin(current, response.headers.get("location", "")))
+                        location = response.headers.get("location", "").strip()
+                        if not location or any(ord(c) < 32 for c in location):
+                            if diagnostic is not None:
+                                diagnostic["status"] = "redirect_invalid_location"
+                            return found
+                        try:
+                            target = canonical_homepage_url(urljoin(current, location))
+                        except ValueError as exc:
+                            if diagnostic is not None:
+                                diagnostic["status"] = "redirect_invalid_location"
+                                diagnostic["error_detail"] = str(exc)[:240]
+                            return found
                         parsed = urlparse(target)
                         if diagnostic is not None:
                             diagnostic["redirects"].append(target)
@@ -446,6 +457,8 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                 diagnostic["status"] = type(exc).__name__
                 diagnostic["error_detail"] = str(exc)[:240]
                 diagnostic["error_stage_url"] = current if "current" in locals() else url
+                if "certificate" in str(exc).lower():
+                    diagnostic["ssl_hint"] = "check_valid_certificate_on_alternate_www_hostname"
         _homepage_cache[url] = (time.time(), found)
         return found
 
@@ -506,6 +519,7 @@ async def homepage_profiles(communications, member_names=None):
             "fetch_status": status,
             "retry_errors": diagnostic.get("retry_errors", []),
             "error_detail": diagnostic.get("error_detail"),
+            "ssl_hint": diagnostic.get("ssl_hint"),
             "error_stage_url": diagnostic.get("error_stage_url"),
             "redirect_reason": diagnostic.get("redirect_reason"),
             "redirect_target_host": diagnostic.get("redirect_target_host"),
@@ -867,6 +881,18 @@ async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|I
     personal_profiles = {number: dict(links) for number, links in profiles.items()}
     parliament_profiles = communication_profiles(communications)
     party_links, party_diagnostic = await party_profile_links(rows)
+    previous = read_profile_snapshot().get(language, {})
+    previous_profiles = previous.get("profiles", {})
+    retained = 0
+    for number in ids:
+        old = previous_profiles.get(number, {})
+        if not isinstance(old, dict):
+            continue
+        current = profiles.setdefault(number, {})
+        for platform, link in old.items():
+            if platform in _social_domains and platform not in current and isinstance(link, str) and verified_social_url(link):
+                current[platform] = link
+                retained += 1
     party_added = 0
     for number, links in party_links.items():
         existing = profiles.setdefault(number, {})
@@ -893,7 +919,7 @@ async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|I
         "members_without_social_profiles": len(ids - set(profiles)),
     }
     platforms = {platform: sum(platform in links for links in profiles.values()) for platform in _social_domains}
-    data = {"profiles": profiles, "profiles_by_source": by_source, "updated_at": datetime.now(timezone.utc).isoformat(), "cached": False, "debug": {"party_sources": party_diagnostic, "party_members_added": party_added, "coverage": missing, "platforms": platforms, "homepages_checked": homepages, "homepage_diagnostics": homepage_report, "homepage_profiles": len(profiles), "communication_count": len(communications), "communication_error": diagnostic.get("error")}}
+    data = {"profiles": profiles, "profiles_by_source": by_source, "updated_at": datetime.now(timezone.utc).isoformat(), "cached": False, "debug": {"party_sources": party_diagnostic, "party_members_added": party_added, "previous_links_retained": retained, "coverage": missing, "platforms": platforms, "homepages_checked": homepages, "homepage_diagnostics": homepage_report, "homepage_profiles": len(profiles), "communication_count": len(communications), "communication_error": diagnostic.get("error")}}
     snapshot = read_profile_snapshot()
     snapshot[language] = data
     save_profile_snapshot(snapshot)
