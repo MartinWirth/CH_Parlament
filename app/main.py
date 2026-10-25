@@ -912,16 +912,27 @@ async def party_profile_links(member_rows):
                 rejected.setdefault(platform, {"url": link, "reason": "Kein persönlicher Namensbezug im Profilpfad"})
         if accepted:
             verified[number] = accepted
+        fetch_status = fetch_diagnostic.get("status", "unknown")
+        if fetch_status != "parsed":
+            outcome = "fetch_or_parse_failed"
+        elif accepted:
+            outcome = "personal_links_found"
+        elif candidates:
+            outcome = "only_unverified_or_party_links"
+        else:
+            outcome = "no_social_links_in_html"
         pages.append({
             "person_number": number,
             "name": members[number],
             "profile_url": page_url,
+            "outcome": outcome,
             "found_links": len(links),
             "fetch": fetch_diagnostic,
             "accepted": accepted,
             "rejected": rejected,
             "note": "Keine Links gefunden: Seite nicht erreichbar, kein HTML, Cache leer oder keine Social-Links" if not links else None,
         })
+    diagnostic["outcome_counts"] = {status: sum(page["outcome"] == status for page in pages) for status in ("personal_links_found", "only_unverified_or_party_links", "no_social_links_in_html", "fetch_or_parse_failed")}
     diagnostic["matched_personal_handles"] = len(verified)
     diagnostic["pages"] = pages
     return verified, diagnostic
