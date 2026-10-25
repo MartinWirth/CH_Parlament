@@ -372,7 +372,7 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
             alternate_tried = set()
             for _ in range(3):
                 response = None
-                for attempt in range(2):
+                for attempt in range(3):
                     try:
                         stage = "http_get"
                         response = await client.get(current, follow_redirects=False)
@@ -394,13 +394,13 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                             continue
                         if diagnostic is not None:
                             diagnostic.setdefault("retry_errors", []).append(type(exc).__name__)
-                        if attempt == 1:
+                        if attempt == 2:
                             raise
                         await asyncio.sleep(0.2)
                     except httpx.TimeoutException as exc:
                         if diagnostic is not None:
                             diagnostic.setdefault("retry_errors", []).append(type(exc).__name__)
-                        if attempt == 1:
+                        if attempt == 2:
                             raise
                         await asyncio.sleep(0.2)
                 if response is None:
@@ -461,7 +461,13 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                 raw_social = []
                 for match in re.findall(r'https?://[^\s"<>]{5,250}', html_text, flags=re.I):
                     candidate = match.replace("\\/", "/").rstrip("),;")
-                    if verified_social_url(candidate) and candidate not in raw_social:
+                    try:
+                        valid_social = verified_social_url(candidate)
+                    except (ValueError, UnicodeError):
+                        if diagnostic is not None:
+                            diagnostic['invalid_social_link_count'] = diagnostic.get('invalid_social_link_count', 0) + 1
+                        continue
+                    if valid_social and candidate not in raw_social:
                         raw_social.append(candidate)
                 if diagnostic is not None:
                     diagnostic["raw_social_urls"] = raw_social[:40]
@@ -478,11 +484,16 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                     stage = "social_link_urljoin"
                     try:
                         target = urljoin(current, href)
-                    except ValueError:
+                    except (ValueError, UnicodeError):
                         if diagnostic is not None:
                             diagnostic["invalid_social_link_count"] = diagnostic.get("invalid_social_link_count", 0) + 1
                         continue
-                    platform = verified_social_url(target)
+                    try:
+                        platform = verified_social_url(target)
+                    except (ValueError, UnicodeError):
+                        if diagnostic is not None:
+                            diagnostic['invalid_social_link_count'] = diagnostic.get('invalid_social_link_count', 0) + 1
+                        continue
                     if platform:
                         if diagnostic is not None:
                             diagnostic["parser"]["social_candidates"] += 1
