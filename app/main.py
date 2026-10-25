@@ -173,13 +173,51 @@ class SocialLinkParser(HTMLParser):
     def __init__(self):
         super().__init__()
         self.links = []
+        self.json_documents = []
+        self._json_ld = False
+        self._json_chunks = []
 
     def handle_starttag(self, tag, attrs):
-        if tag.lower() != "a":
-            return
-        href = dict(attrs).get("href")
-        if href:
-            self.links.append(href)
+        attrs = dict(attrs)
+        if tag == "a" and attrs.get("href"):
+            self.links.append(attrs["href"])
+        elif tag == "link" and "me" in attrs.get("rel", "").lower().split() and attrs.get("href"):
+            self.links.append(attrs["href"])
+        elif tag == "meta" and attrs.get("property", "").lower() in ("og:see_also", "article:author") and attrs.get("content"):
+            self.links.append(attrs["content"])
+        elif tag == "script" and attrs.get("type", "").lower() == "application/ld+json":
+            self._json_ld = True
+            self._json_chunks = []
+
+    def handle_data(self, data):
+        if self._json_ld:
+            self._json_chunks.append(data)
+
+    def handle_endtag(self, tag):
+        if tag == "script" and self._json_ld:
+            self._json_ld = False
+            try:
+                self.json_documents.append(json.loads("".join(self._json_chunks)))
+            except ValueError:
+                pass
+
+    def social_references(self):
+        def walk(node):
+            if isinstance(node, dict):
+                links = node.get("sameAs", [])
+                if isinstance(links, str):
+                    links = [links]
+                if isinstance(links, list):
+                    for link in links:
+                        if isinstance(link, str):
+                            yield link
+                for value in node.values():
+                    yield from walk(value)
+            elif isinstance(node, list):
+                for value in node:
+                    yield from walk(value)
+        for document in self.json_documents:
+            yield from walk(document)
 
 
 _homepage_cache = {}
@@ -258,25 +296,34 @@ async def scan_homepage(client, url, semaphore):
     async with semaphore:
         found = {}
         try:
-            parsed = urlparse(url)
-            if not await asyncio.to_thread(public_hostname, parsed.hostname):
+            original = urlparse(url)
+            if not await asyncio.to_thread(public_hostname, original.hostname):
                 return found
-            # Never follow redirects to untrusted/internal hosts.
-            async with client.stream("GET", url, follow_redirects=False) as response:
-                if response.status_code != 200 or "text/html" not in response.headers.get("content-type", "").lower():
-                    return found
-                content = bytearray()
-                async for chunk in response.aiter_bytes():
-                    content.extend(chunk)
-                    if len(content) > 300_000:
+            current = url
+            for _ in range(3):
+                async with client.stream("GET", current, follow_redirects=False) as response:
+                    if response.status_code in (301, 302, 303, 307, 308):
+                        target = urljoin(current, response.headers.get("location", ""))
+                        parsed = urlparse(target)
+                        if parsed.scheme != "https" or parsed.hostname != original.hostname or parsed.port not in (None, 443) or parsed.username or parsed.password:
+                            return found
+                        current = target
+                        continue
+                    if response.status_code != 200 or "text/html" not in response.headers.get("content-type", "").lower():
                         return found
-            parser = SocialLinkParser()
-            parser.feed(content.decode("utf-8", errors="replace"))
-            for href in parser.links:
-                target = urljoin(url, href)
-                platform = verified_social_url(target)
-                if platform:
-                    found.setdefault(platform, target)
+                    content = bytearray()
+                    async for chunk in response.aiter_bytes():
+                        content.extend(chunk)
+                        if len(content) > 300_000:
+                            return found
+                parser = SocialLinkParser()
+                parser.feed(content.decode("utf-8", errors="replace"))
+                for href in list(parser.links) + list(parser.social_references()):
+                    target = urljoin(current, href)
+                    platform = verified_social_url(target)
+                    if platform:
+                        found.setdefault(platform, target)
+                break
         except (httpx.HTTPError, ValueError, UnicodeError):
             pass
         _homepage_cache[url] = (time.time(), found)
