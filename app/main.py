@@ -538,6 +538,21 @@ def personal_handle_matches(url, person_name):
     return len(surname) >= 4 and surname in key(urlparse(url).path)
 
 
+def prioritize_missing_homepages(details):
+    """Rank actionable failures ahead of pages needing additional sources."""
+    technical = {"fetch_error"}
+    def priority(item):
+        status = item.get("fetch_status", "")
+        if status == "redirect_blocked":
+            return 0
+        if item.get("reason") in technical:
+            return 1
+        if item.get("reason") == "no_verified_personal_link":
+            return 2
+        return 3
+    return sorted(details, key=lambda item: (priority(item), item.get("name", "")))
+
+
 async def homepage_profiles(communications, member_names=None):
     homepages = {}
     for row in communications:
@@ -591,6 +606,7 @@ async def homepage_profiles(communications, member_names=None):
             "error_stage_url": diagnostic.get("error_stage_url"),
             "redirect_reason": diagnostic.get("redirect_reason"),
             "redirect_target_host": diagnostic.get("redirect_target_host"),
+            "redirect_chain": diagnostic.get("redirects", []),
             "candidate_count": len(candidates),
             "candidate_samples": candidates[:5],
         })
@@ -601,6 +617,13 @@ async def homepage_profiles(communications, member_names=None):
         "reasons": dict(statuses),
         "fetch_statuses": dict(Counter(d.get("status", "unknown") for d in diagnostics)),
         "missing_details": missing_details,
+        "prioritized_missing_details": prioritize_missing_homepages(missing_details),
+        "redirects_blocked": [
+            {"name": item["name"], "homepage": item["homepage"],
+             "target_host": item.get("redirect_target_host"),
+             "reason": item.get("redirect_reason")}
+            for item in missing_details if item.get("fetch_status") == "redirect_blocked"
+        ],
     }
     save_homepage_cache()
     return enriched, len(homepages), homepage_report
