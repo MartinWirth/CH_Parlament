@@ -1,1 +1,62 @@
-[]
+[
+  {
+    "person_number": "16902",
+    "name": "Arbër Bullakaj",
+    "profile_url": "https://www.sp-ps.ch/person/arber-bullakaj/",
+    "verified": true
+  },
+  {
+    "person_number": "4219",
+    "name": "Brigitte Crottaz",
+    "profile_url": "https://www.sp-ps.ch/person/brigitte-crottaz/",
+    "verified": true
+  },
+  {
+    "person_number": "15004",
+    "name": "Benoît Gaillard",
+    "profile_url": "https://www.sp-ps.ch/person/benoit-gaillard/",
+    "verified": true
+  },
+  {
+    "person_number": "4121",
+    "name": "Barbara Gysi",
+    "profile_url": "https://www.sp-ps.ch/person/barbara-gysi/",
+    "verified": true
+  },
+  {
+    "person_number": "10825",
+    "name": "Brenda Tuosto",
+    "profile_url": "https://www.sp-ps.ch/person/brenda-tuosto/",
+    "verified": true
+  },
+  {
+    "person_number": "10851",
+    "name": "Andrea Zryd",
+    "profile_url": "https://www.sp-ps.ch/person/andrea-zryd/",
+    "verified": true
+  },
+  {
+    "person_number": "10824",
+    "name": "Anna Rosenwasser",
+    "profile_url": "https://www.sp-ps.ch/person/anna-rosenwasser/",
+    "verified": true
+  },
+  {
+    "person_number": "4270",
+    "name": "Baptiste Hurni",
+    "profile_url": "https://www.sp-ps.ch/person/baptiste-hurni/",
+    "verified": true
+  },
+  {
+    "person_number": "4290",
+    "name": "Andri Silberschmidt",
+    "profile_url": "https://www.fdp.ch/personen/nationalraete/nationalrat-detail/members/user/andri-silberschmidt",
+    "verified": true
+  },
+  {
+    "person_number": "4161",
+    "name": "Andreas Glarner",
+    "profile_url": "https://www.svp.ch/menschen/portrait/andreas-glarner/",
+    "verified": true
+  }
+]
