@@ -8,6 +8,7 @@ import ipaddress
 import socket
 import re
 import json
+import unicodedata
 from html.parser import HTMLParser
 from urllib.parse import urljoin
 import xml.etree.ElementTree as ET
@@ -404,7 +405,20 @@ async def party_profile_links(member_rows):
     async with httpx.AsyncClient(timeout=5, trust_env=False, headers={"User-Agent": "CH-Parlament/1.0"}) as client:
         results = await asyncio.gather(*(scan_homepage(client, url, semaphore) for url in sources.values()))
     save_homepage_cache()
-    return {number: links for number, links in zip(sources, results) if links}, diagnostic
+    # A party page may contain shared organisation accounts in its footer.
+    # Only accept profile handles containing the person's surname; this is
+    # deliberately conservative and may miss legitimate pseudonyms.
+    members = {str(pick(row, "PersonNumber")): normalize(row)["name"] for row in member_rows if is_current(row)}
+    def ascii_key(value):
+        return "".join(ch for ch in unicodedata.normalize("NFKD", value.casefold()) if ch.isascii() and ch.isalnum())
+    verified = {}
+    for number, links in zip(sources, results):
+        surname = ascii_key(members[number].split()[-1])
+        personal = {platform: link for platform, link in links.items() if surname and surname in ascii_key(urlparse(link).path)}
+        if personal:
+            verified[number] = personal
+    diagnostic["matched_personal_handles"] = len(verified)
+    return verified, diagnostic
 
 
 @app.get("/")
