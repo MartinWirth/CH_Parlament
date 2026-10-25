@@ -10,7 +10,7 @@ import re
 import json
 import unicodedata
 from html.parser import HTMLParser
-from urllib.parse import urljoin
+from urllib.parse import urljoin, parse_qs
 import xml.etree.ElementTree as ET
 from urllib.parse import urlparse
 import httpx
@@ -501,6 +501,30 @@ async def discover_sp_party_profiles(member_rows):
     return found, diagnostics
 
 
+class FdpRosterLinkParser(HTMLParser):
+    """Capture FDP modal links together with their visible anchor labels."""
+    def __init__(self):
+        super().__init__()
+        self.entries = []
+        self._href = None
+        self._text = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "a":
+            self._href = dict(attrs).get("href")
+            self._text = []
+
+    def handle_data(self, data):
+        if self._href is not None:
+            self._text.append(data)
+
+    def handle_endtag(self, tag):
+        if tag == "a" and self._href is not None:
+            self.entries.append((self._href, " ".join(" ".join(self._text).split())))
+            self._href = None
+            self._text = []
+
+
 async def discover_other_party_profiles(member_rows):
     """Match official party roster links to active members, without guessing URLs."""
     rosters = {
@@ -540,6 +564,21 @@ async def discover_other_party_profiles(member_rows):
                     parser.feed(response.text)
                     matches = {}
                     fdp_profile_samples = []
+                    if group == "FDP":
+                        fdp_parser = FdpRosterLinkParser()
+                        fdp_parser.feed(response.text)
+                        modal_samples = []
+                        for href, label in fdp_parser.entries:
+                            parsed_modal = urlparse(urljoin(roster_url, href))
+                            query = parse_qs(parsed_modal.query)
+                            if parsed_modal.hostname not in ("fdp.ch", "www.fdp.ch") or not any("showModal" in v for values in query.values() for v in values):
+                                continue
+                            if len(modal_samples) < 12:
+                                modal_samples.append({"url": urljoin(roster_url, href)[:400], "label": label[:100]})
+                            candidates = [number for number, name in members.get(group, []) if key(name) == key(label)]
+                            if len(candidates) == 1:
+                                matches[candidates[0]] = urljoin(roster_url, href)
+                        report["modal_link_samples"] = modal_samples
                     for href in parser.links:
                         url = urljoin(roster_url, href)
                         parsed = urlparse(url)
@@ -571,6 +610,7 @@ async def discover_other_party_profiles(member_rows):
                     report.update({"status": "parsed", "matched": len(matches), "links": len(parser.links)})
                     if group == "FDP":
                         report["profile_url_samples"] = fdp_profile_samples
+                        report["link_samples"] = [urljoin(roster_url, href)[:250] for href in parser.links[:12]]
                     diagnostics[group]["matched"] = len([number for number in discovered if number in {n for n, _ in members.get(group, [])}])
                     diagnostics[group]["status"] = "parsed"
                 except (httpx.HTTPError, ValueError) as exc:
