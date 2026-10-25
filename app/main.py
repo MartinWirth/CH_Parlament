@@ -7,6 +7,7 @@ import asyncio
 import ipaddress
 import socket
 import re
+import json
 from html.parser import HTMLParser
 from urllib.parse import urljoin
 import xml.etree.ElementTree as ET
@@ -183,6 +184,27 @@ class SocialLinkParser(HTMLParser):
 
 _homepage_cache = {}
 _homepage_cache_ttl = 86400
+_cache_path = Path(os.getenv("SOCIAL_CACHE_PATH", str(ROOT.parent / ".social_profiles_cache.json")))
+
+def load_homepage_cache():
+    try:
+        entries = json.loads(_cache_path.read_text(encoding="utf-8"))
+        for url, entry in entries.items():
+            if time.time() - entry["checked_at"] < _homepage_cache_ttl:
+                _homepage_cache[url] = (entry["checked_at"], entry["links"])
+    except (OSError, ValueError, TypeError, KeyError):
+        logger.info("No usable social-profile disk cache")
+
+def save_homepage_cache():
+    try:
+        entries = {url: {"checked_at": timestamp, "links": links} for url, (timestamp, links) in _homepage_cache.items() if time.time() - timestamp < _homepage_cache_ttl}
+        temporary = _cache_path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(entries, ensure_ascii=False), encoding="utf-8")
+        temporary.replace(_cache_path)
+    except OSError as exc:
+        logger.warning("Social-profile cache write failed: %s", exc)
+
+load_homepage_cache()
 _social_domains = {
     "X": ("x.com", "twitter.com"),
     "Facebook": ("facebook.com", "fb.com"),
@@ -227,7 +249,7 @@ def public_hostname(host):
 
 
 async def scan_homepage(client, url, semaphore):
-    now = time.monotonic()
+    now = time.time()
     cached = _homepage_cache.get(url)
     if cached and now - cached[0] < _homepage_cache_ttl:
         return cached[1]
@@ -255,7 +277,7 @@ async def scan_homepage(client, url, semaphore):
                     found.setdefault(platform, target)
         except (httpx.HTTPError, ValueError, UnicodeError):
             pass
-        _homepage_cache[url] = (time.monotonic(), found)
+        _homepage_cache[url] = (time.time(), found)
         return found
 
 
@@ -271,6 +293,7 @@ async def homepage_profiles(communications):
     async with httpx.AsyncClient(timeout=5, trust_env=False, headers={"User-Agent": "CH-Parlament/1.0"}) as client:
         tasks = [scan_homepage(client, url, semaphore) for url in homepages.values()]
         results = await asyncio.gather(*tasks)
+    save_homepage_cache()
     return {number: links for number, links in zip(homepages, results) if links}, len(homepages)
 
 
@@ -312,7 +335,8 @@ async def social_profiles_endpoint(language: str = Query("DE", pattern="^(DE|FR|
     communications, diagnostic = await fetch_communications(language, ids)
     profiles, homepages = await homepage_profiles(communications)
     logger.info("Social enrichment homepages=%d profiles=%d", homepages, len(profiles))
-    return {"profiles": profiles, "debug": {"homepages_checked": homepages, "homepage_profiles": len(profiles), "communication_count": len(communications), "communication_error": diagnostic.get("error")}}
+    platforms = {platform: sum(platform in links for links in profiles.values()) for platform in _social_domains}
+    return {"profiles": profiles, "updated_at": datetime.now(timezone.utc).isoformat(), "debug": {"platforms": platforms, "homepages_checked": homepages, "homepage_profiles": len(profiles), "communication_count": len(communications), "communication_error": diagnostic.get("error")}}
 
 
 @app.get("/api/person-communications-diagnostic")
