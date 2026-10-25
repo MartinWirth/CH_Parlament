@@ -464,8 +464,49 @@ def configured_party_profiles(member_rows):
     return accepted, {"configured": len(entries), "accepted": len(accepted), "rejected": rejected}
 
 
+async def discover_sp_party_profiles(member_rows):
+    """Discover named profiles from the SP's official parliamentary roster."""
+    roster_url = "https://www.sp-ps.ch/menschen/national-und-staenderat/"
+    diagnostics = {"roster_url": roster_url, "status": "pending", "matched": 0}
+    members = {}
+    for row in member_rows:
+        if is_current(row) and str(pick(row, "PartyAbbreviation", "PartyName")).upper() in ("SP", "PS"):
+            number = str(pick(row, "PersonNumber"))
+            name = normalize(row)["name"]
+            slug = "-".join(re.findall(r"[a-z0-9]+", "".join(ch for ch in unicodedata.normalize("NFKD", name.casefold()) if ch.isascii())))
+            if slug:
+                members[slug] = (number, name)
+    found = {}
+    try:
+        async with httpx.AsyncClient(timeout=8, trust_env=False, follow_redirects=False) as client:
+            response = await client.get(roster_url)
+            response.raise_for_status()
+            if "text/html" not in response.headers.get("content-type", "").lower() or len(response.content) > 400_000:
+                diagnostics["status"] = "invalid_html"
+                return found, diagnostics
+            parser = SocialLinkParser()
+            parser.feed(response.text)
+            for href in parser.links:
+                target = urljoin(roster_url, href)
+                parsed = urlparse(target)
+                if parsed.scheme != "https" or parsed.hostname not in ("www.sp-ps.ch", "sp-ps.ch"):
+                    continue
+                match = re.fullmatch(r"/person/([a-z0-9-]+)/?", parsed.path)
+                if match and match.group(1) in members:
+                    number, _ = members[match.group(1)]
+                    found[number] = target.split("?", 1)[0].split("#", 1)[0]
+            diagnostics.update({"status": "parsed", "matched": len(found)})
+    except (httpx.HTTPError, ValueError) as exc:
+        diagnostics.update({"status": "fetch_failed", "error": str(exc)[:150]})
+    return found, diagnostics
+
+
 async def party_profile_links(member_rows):
     sources, diagnostic = configured_party_profiles(member_rows)
+    discovered, discovery_diagnostic = await discover_sp_party_profiles(member_rows)
+    diagnostic["discovery"] = discovery_diagnostic
+    for number, url in discovered.items():
+        sources.setdefault(number, url)
     if not sources:
         diagnostic["pages"] = []
         return {}, diagnostic
