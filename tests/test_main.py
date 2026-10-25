@@ -97,3 +97,16 @@ def test_evp_verified_public_name_alias():
     assert evp_member_candidates("marcjost", members) == [("456", "Marc Jost")]
     assert evp_member_candidates("nikgugger", {"other": [("999", "Other")]}) == []
     assert evp_member_candidates("unknownperson", members) == []
+
+
+def test_prioritize_missing_homepages():
+    from app.main import prioritize_missing_homepages
+    details = [
+        {"name": "No links", "reason": "no_social_links", "fetch_status": "parsed"},
+        {"name": "Candidates", "reason": "no_verified_personal_link", "fetch_status": "parsed"},
+        {"name": "Timeout", "reason": "fetch_error", "fetch_status": "timeout"},
+        {"name": "Redirect", "reason": "fetch_error", "fetch_status": "redirect_blocked"},
+    ]
+    ordered = prioritize_missing_homepages(details)
+    assert [row["name"] for row in ordered] == ["Redirect", "Timeout", "Candidates", "No links"]
+    assert [row["name"] for row in details] == ["No links", "Candidates", "Timeout", "Redirect"]
