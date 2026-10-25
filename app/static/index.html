@@ -1,11 +1,11 @@
 <!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>CH_Parlament</title><link rel="stylesheet" href="/static/style.css"></head>
-<body><main><header><h1>CH_Parlament</h1><p>Nationalrat und Ständerat · Schweizer Bundesversammlung</p></header>
+<body><main><header><button id="debug-phase" type="button" aria-pressed="true">Debug-Phase: EIN</button><h1>CH_Parlament</h1><p>Nationalrat und Ständerat · Schweizer Bundesversammlung</p></header>
 <section class="filters"><label for="ui-language"><strong>Anzeigesprache</strong></label> <select id="ui-language" aria-label="Anzeigesprache"><option value="de" selected>Deutsch</option><option value="fr">Français</option><option value="it">Italiano</option><option value="rm">Rumantsch</option></select><details id="filters-details"><summary>Parlamentarier filtern</summary><div id="filters" class="grid"></div><button id="reset">Filter zurücksetzen</button></details></section>
 <section><details id="members-details"><summary>Parlamentarier <span id="count"></span></summary><div class="heading"><input id="search" type="search" placeholder="Name suchen…" aria-label="Name suchen"></div>
 <div class="tablewrap"><table><thead><tr id="headers"></tr></thead><tbody id="results"></tbody></table></div><p id="status" role="status">Lade Parlamentsdaten…</p></details></section>
 <section><button id="export-all" type="button">Alle exportieren (CSV)</button> <button id="social-refresh" type="button">Social-Media-Profile aktualisieren</button> <span id="social-updated" aria-live="polite"></span></section>
-<section><button id="debug-phase" type="button" aria-pressed="true">Debug-Phase: EIN</button> <button id="debug-toggle" type="button">Debug-Log anzeigen</button><button id="debug-clear" type="button">Log löschen</button><pre id="debug-log" hidden style="white-space:pre-wrap;overflow-wrap:anywhere;background:#101c2c;color:#d6e9fa;padding:12px;border-radius:8px;max-height:350px;overflow:auto"></pre></section>
+<section><button id="debug-toggle" type="button">Debug-Log anzeigen</button><button id="debug-clear" type="button">Log löschen</button><pre id="debug-log" hidden style="white-space:pre-wrap;overflow-wrap:anywhere;background:#101c2c;color:#d6e9fa;padding:12px;border-radius:8px;max-height:350px;overflow:auto"></pre></section>
 <footer><span id="source"></span><p>Unabhängige Anwendung, keine amtliche Veröffentlichung. Daten werden unverändert aus der Quelle übernommen; die Anzeige wird gefiltert.</p></footer></main>
 <script src="/static/app.js" defer></script></body></html>
