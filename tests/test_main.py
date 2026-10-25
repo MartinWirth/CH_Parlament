@@ -85,3 +85,15 @@ def test_party_personal_handle_swiss_transliteration():
     assert not party_personal_handle_matches("https://www.instagram.com/fdp_schweiz/", "Benjamin Mühlemann")
     assert not party_personal_handle_matches("https://www.facebook.com/fdp.dieliberalen/", "Damian Müller")
     assert not party_personal_handle_matches("https://www.instagram.com/other_person/", "Damian Müller")
+
+
+def test_evp_verified_public_name_alias():
+    from app.main import evp_member_candidates
+    members = {
+        "niklaussamuelgugger": [("123", "Niklaus-Samuel Gugger")],
+        "marcjost": [("456", "Marc Jost")],
+    }
+    assert evp_member_candidates("nikgugger", members) == [("123", "Niklaus-Samuel Gugger")]
+    assert evp_member_candidates("marcjost", members) == [("456", "Marc Jost")]
+    assert evp_member_candidates("nikgugger", {"other": [("999", "Other")]}) == []
+    assert evp_member_candidates("unknownperson", members) == []
