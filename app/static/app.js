@@ -39,12 +39,7 @@ async function loadMembers(){
   }catch(err){if(language.value!==requested||version!==loadVersion)return;debug("FEHLER",{message:err.message});status.textContent="Daten konnten nicht geladen werden: "+err.message}
 }
 async function loadSocialProfiles(requested,version){
-  debug("Social-Media-Abfrage gestartet",{language:requested});
-  const started=performance.now();
-  try{
-    const response=await fetch("/api/social-profiles?language="+encodeURIComponent(requested.toUpperCase()));
-    if(!response.ok)throw Error("HTTP "+response.status);
-    const data=await response.json();
+  const applyProfiles=(data,source)=>{
     if(version!==loadVersion||language.value!==requested)return;
     let updated=0;
     for(const member of all){
@@ -52,7 +47,22 @@ async function loadSocialProfiles(requested,version){
       if(links&&Object.keys(links).length){member.socialmedia={...member.socialmedia,...links};updated++}
     }
     render();
-    debug("Social-Media-Abfrage abgeschlossen",{duration_ms:Math.round(performance.now()-started),updated_members:updated,updated_at:data.updated_at,backend:data.debug});
-  }catch(err){if(version===loadVersion)debug("Social-Media-Abfrage fehlgeschlagen",{message:err.message})}
+    debug("Social-Media-Profile "+source,{updated_members:updated,updated_at:data.updated_at,backend:data.debug});
+  };
+  const query="?language="+encodeURIComponent(requested.toUpperCase());
+  try{
+    const response=await fetch("/api/social-profiles"+query);
+    if(!response.ok)throw Error("Cache HTTP "+response.status);
+    applyProfiles(await response.json(),"aus Cache geladen");
+  }catch(err){debug("Social-Media-Cache nicht verfügbar",{message:err.message})}
+  if(version!==loadVersion)return;
+  debug("Social-Media-Aktualisierung gestartet",{language:requested});
+  const started=performance.now();
+  try{
+    const response=await fetch("/api/social-profiles/refresh"+query);
+    if(!response.ok)throw Error("HTTP "+response.status);
+    applyProfiles(await response.json(),"aktualisiert");
+    if(version===loadVersion)debug("Social-Media-Aktualisierung abgeschlossen",{duration_ms:Math.round(performance.now()-started)});
+  }catch(err){if(version===loadVersion)debug("Social-Media-Aktualisierung fehlgeschlagen",{message:err.message})}
 }
 loadMembers();
