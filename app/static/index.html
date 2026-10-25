@@ -2,7 +2,7 @@
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>CH_Parlament</title><link rel="stylesheet" href="/static/style.css"></head>
 <body><main><header><h1>CH_Parlament</h1><p>Nationalrat und Ständerat · Schweizer Bundesversammlung</p></header>
-<section class="filters"><h2>Parlamentarier filtern</h2><div id="filters" class="grid"></div><button id="reset">Filter zurücksetzen</button></section>
+<section class="filters"><label for="ui-language"><strong>Anzeigesprache</strong></label> <select id="ui-language" aria-label="Anzeigesprache"><option value="de" selected>Deutsch</option><option value="fr">Français</option><option value="it">Italiano</option><option value="rm">Rumantsch</option></select><h2 style="margin-top:18px">Parlamentarier filtern</h2><div id="filters" class="grid"></div><button id="reset">Filter zurücksetzen</button></section>
 <section><div class="heading"><h2>Parlamentarier <span id="count"></span></h2><input id="search" type="search" placeholder="Name suchen…" aria-label="Name suchen"></div>
 <div class="tablewrap"><table><thead><tr id="headers"></tr></thead><tbody id="results"></tbody></table></div><p id="status" role="status">Lade Parlamentsdaten…</p></section>
 <section><button id="debug-toggle" type="button">Debug-Log anzeigen</button><button id="debug-clear" type="button">Log löschen</button><pre id="debug-log" hidden style="white-space:pre-wrap;overflow-wrap:anywhere;background:#101c2c;color:#d6e9fa;padding:12px;border-radius:8px;max-height:350px;overflow:auto"></pre></section>
