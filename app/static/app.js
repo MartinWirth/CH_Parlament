@@ -1,5 +1,5 @@
 const councilNames={de:["Nationalrat","Ständerat","Bundesrat","Vereinigte Bundesversammlung"],fr:["Conseil national","Conseil des États","Conseil fédéral","Assemblée fédérale (Chambres réunies)"],it:["Consiglio nazionale","Consiglio degli Stati","Consiglio federale","Assemblea federale plenaria"],rm:["Cussegl naziunal","Cussegl dals chantuns","Cussegl federal","Assamblea federala reunida"]};
-const councilCodes={"1":0,"2":1,"3":3,"NR":0,"SR":1,"VB":3};
+const councilCodes={"1":0,"2":1,"3":3,"99":2,"NR":0,"SR":1,"BR":2,"VB":3};
 const language=document.querySelector("#ui-language");
 function councilIndex(m){const code=String(m.rat_code??"").toUpperCase();if(code in councilCodes)return councilCodes[code];const name=String(m.rat||"").toLowerCase();for(const values of Object.values(councilNames)){const idx=values.findIndex(v=>v.toLowerCase()===name);if(idx>=0)return idx}return -1}
 function councilLabel(m){const i=councilIndex(m);return i<0?m.rat:councilNames[language.value][i]}
