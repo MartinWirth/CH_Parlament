@@ -333,6 +333,20 @@ def same_site_www_redirect(original_host, target_host):
     return bare(original_host.encode("idna").decode("ascii")) == bare(target_host.encode("idna").decode("ascii"))
 
 
+def approved_homepage_redirect(source_host, target_host):
+    """Permit explicitly reviewed cross-domain moves only (never suffix matching)."""
+    try:
+        pairs = json.loads(os.getenv("APPROVED_HOMEPAGE_REDIRECTS", "{}"))
+        if not isinstance(pairs, dict):
+            return False
+        source = source_host.encode("idna").decode("ascii").lower().rstrip(".")
+        target = target_host.encode("idna").decode("ascii").lower().rstrip(".")
+        approved = pairs.get(source)
+        return isinstance(approved, str) and approved.lower().rstrip(".") == target
+    except (ValueError, UnicodeError, AttributeError):
+        return False
+
+
 async def scan_homepage(client, url, semaphore, diagnostic=None):
     now = time.time()
     cached = _homepage_cache.get(url)
@@ -370,10 +384,10 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                         if diagnostic is not None:
                             diagnostic["redirects"].append(target)
                             diagnostic["redirect_target_host"] = parsed.hostname
-                        if parsed.scheme != "https" or not same_site_www_redirect(original.hostname, parsed.hostname) or parsed.port not in (None, 443) or parsed.username or parsed.password:
+                        if parsed.scheme != "https" or not (same_site_www_redirect(original.hostname, parsed.hostname) or approved_homepage_redirect(original.hostname, parsed.hostname)) or parsed.port not in (None, 443) or parsed.username or parsed.password:
                             if diagnostic is not None:
                                 diagnostic["status"] = "redirect_blocked"
-                                diagnostic["redirect_reason"] = "https_same_site_www_only"
+                                diagnostic["redirect_reason"] = "cross_domain_not_approved"
                             return found
                         if not await asyncio.to_thread(public_hostname, parsed.hostname):
                             if diagnostic is not None:
