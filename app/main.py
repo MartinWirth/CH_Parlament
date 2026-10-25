@@ -4,7 +4,7 @@ import os
 import logging
 import time
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -35,7 +35,6 @@ def normalize(row):
         "partei": str(pick(row, "PartyAbbreviation", "PartyName", "PartyNameDe", "Party")),
         "kanton": str(pick(row, "CantonName", "CantonNameDe", "CantonAbbreviation", "Canton")),
         "fraktion": str(pick(row, "ParlGroupName", "ParlGroupNameDe", "ParlGroupAbbreviation", "ParlGroup")),
-        "sprache": str(pick(row, "Language", "LanguageCode", "LanguageName")),
         "geschlecht": str(pick(row, "GenderAsString", "Gender", "Sex")),
     }
 
@@ -51,7 +50,7 @@ def is_current(row):
     return True
 
 
-async def fetch_members():
+async def fetch_members(language="DE"):
     rows, url, seen = [], f"{API.rstrip('/')}/MemberCouncil", set()
     logger.info("API fetch started endpoint=%s", url)
     started = time.monotonic()
@@ -60,7 +59,7 @@ async def fetch_members():
             if url in seen or len(seen) >= 30:
                 raise ValueError("API pagination loop or limit exceeded")
             seen.add(url)
-            response = await client.get(url, params={"$format": "json", "$filter": "Active eq true", "$top": 1000} if len(seen) == 1 else None)
+            response = await client.get(url, params={"$format": "json", "$filter": f"Active eq true and Language eq '{language}'", "$top": 1000} if len(seen) == 1 else None)
             logger.info("API response page=%d status=%d bytes=%d", len(seen), response.status_code, len(response.content))
             response.raise_for_status()
             payload = response.json()
@@ -84,9 +83,9 @@ def index():
 
 
 @app.get("/api/members")
-async def members():
+async def members(language: str = Query("DE", pattern="^(DE|FR|IT|RM)$")):
     try:
-        rows = await fetch_members()
+        rows = await fetch_members(language)
     except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
         logger.exception("Member API request failed")
         raise HTTPException(status_code=502, detail=f"Parlamentsdienst nicht erreichbar: {exc}") from exc
@@ -97,6 +96,7 @@ async def members():
     logger.info("Members returned unique=%d", len(unique))
     return {
         "debug": {"raw_count": len(rows), "current_count": len(result), "unique_count": len(unique), "sample_keys": list(rows[0].keys()) if rows else [], "active_sample": [{"Active": r.get("Active"), "DateLeaving": r.get("DateLeaving")} for r in rows[:3]]},
+        "data_language": language,
         "source": "Parlamentsdienste der Bundesversammlung, Bern",
         "retrieved_at": datetime.now(timezone.utc).isoformat(),
         "members": sorted(unique.values(), key=lambda m: m["name"].casefold()),
