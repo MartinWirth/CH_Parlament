@@ -176,9 +176,14 @@ class SocialLinkParser(HTMLParser):
         self.json_documents = []
         self._json_ld = False
         self._json_chunks = []
+        self._excluded_depth = 0
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
+        if tag in ("footer", "nav") or (tag in ("div", "section") and any(word in (attrs.get("class", "")+" "+attrs.get("id", "")).lower().split() for word in ("footer", "site-footer", "main-footer"))):
+            self._excluded_depth += 1
+        if self._excluded_depth:
+            return
         if tag == "a" and attrs.get("href"):
             self.links.append(attrs["href"])
         elif tag == "link" and "me" in attrs.get("rel", "").lower().split() and attrs.get("href"):
@@ -194,6 +199,8 @@ class SocialLinkParser(HTMLParser):
             self._json_chunks.append(data)
 
     def handle_endtag(self, tag):
+        if self._excluded_depth and tag in ("footer", "nav", "div", "section"):
+            self._excluded_depth -= 1
         if tag == "script" and self._json_ld:
             self._json_ld = False
             try:
@@ -204,7 +211,12 @@ class SocialLinkParser(HTMLParser):
     def social_references(self):
         def walk(node):
             if isinstance(node, dict):
-                links = node.get("sameAs", [])
+                kind = node.get("@type", "")
+                if isinstance(kind, list):
+                    is_person = "Person" in kind
+                else:
+                    is_person = kind == "Person" or str(kind).endswith("/Person")
+                links = node.get("sameAs", []) if is_person else []
                 if isinstance(links, str):
                     links = [links]
                 if isinstance(links, list):
