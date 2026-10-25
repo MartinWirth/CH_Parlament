@@ -504,10 +504,10 @@ async def discover_sp_party_profiles(member_rows):
 async def discover_other_party_profiles(member_rows):
     """Match official party roster links to active members, without guessing URLs."""
     rosters = {
-        "FDP": [("https://www.fdp.ch/partei/organe/fraktion/", "fdp.ch", "/personen/")],
+        "FDP": [("https://www.fdp.ch/partei/organe/fraktion/", "fdp.ch", "/partei/organe/fraktion/fraktion-detail/members/user/")],
         "SVP": [("https://www.svp.ch/menschen/personen/", "svp.ch", "/menschen/portrait/")],
         "Mitte": [("https://die-mitte.ch/die-mitte/menschen/", "die-mitte.ch", "/")],
-        "Gruene": [("https://gruene.ch/organisation/menschen", "gruene.ch", "/")],
+        "Gruene": [("https://gruene.ch/gruene-im-bundeshaus", "gruene.ch", "/")],
     }
     def key(value):
         return "".join(c for c in unicodedata.normalize("NFKD", value.casefold()) if c.isascii() and c.isalnum())
@@ -538,9 +538,21 @@ async def discover_other_party_profiles(member_rows):
                     for href in parser.links:
                         url = urljoin(roster_url, href)
                         parsed = urlparse(url)
-                        if parsed.scheme != "https" or parsed.hostname not in (host, "www." + host) or not parsed.path.startswith(prefix):
+                        if parsed.scheme != "https" or not parsed.hostname:
                             continue
-                        path_key = key(parsed.path.rstrip("/").split("/")[-1])
+                        on_party_site = parsed.hostname in (host, "www." + host)
+                        if group == "Gruene":
+                            # The Greens' parliamentary roster links directly to personal
+                            # websites, not to individual pages on gruene.ch.
+                            if on_party_site or parsed.port not in (None, 443):
+                                continue
+                            if parsed.username or parsed.password or parsed.hostname in ("localhost",):
+                                continue
+                            path_key = key(parsed.hostname.removeprefix("www.").split(".")[0])
+                        else:
+                            if not on_party_site or not parsed.path.startswith(prefix):
+                                continue
+                            path_key = key(parsed.path.rstrip("/").split("/")[-1])
                         if not path_key:
                             continue
                         candidates = [number for number, name in members.get(group, []) if key(name) == path_key]
