@@ -232,8 +232,10 @@ def homepage_url(value):
     value = value.strip()
     if not value or re.search(r"\\s", value):
         return None
-    if value.startswith("www."):
+    if value.startswith("www.") or ("://" not in value and "." in value):
         value = "https://" + value
+    elif value.startswith("http://"):
+        value = "https://" + value[len("http://"):]
     parsed = urlparse(value)
     if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or parsed.port not in (None, 443):
         return None
@@ -357,8 +359,17 @@ async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|I
     ids = {str(pick(row, "PersonNumber")) for row in rows if is_current(row)}
     communications, diagnostic = await fetch_communications(language, ids)
     profiles, homepages = await homepage_profiles(communications)
+    member_homepages = {str(row.get("PersonNumber")) for row in communications if str(row.get("CommunicationTypeText", "")).lower() in ("homepage", "page d'accueil", "sito internet") and homepage_url(row.get("Address"))}
+    missing = {
+        "members_total": len(ids),
+        "members_with_homepage": len(member_homepages),
+        "members_without_homepage": len(ids - member_homepages),
+        "members_with_social_profiles": len(profiles),
+        "members_with_homepage_but_no_social_profiles": len(member_homepages - set(profiles)),
+        "members_without_social_profiles": len(ids - set(profiles)),
+    }
     platforms = {platform: sum(platform in links for links in profiles.values()) for platform in _social_domains}
-    data = {"profiles": profiles, "updated_at": datetime.now(timezone.utc).isoformat(), "cached": False, "debug": {"platforms": platforms, "homepages_checked": homepages, "homepage_profiles": len(profiles), "communication_count": len(communications), "communication_error": diagnostic.get("error")}}
+    data = {"profiles": profiles, "updated_at": datetime.now(timezone.utc).isoformat(), "cached": False, "debug": {"coverage": missing, "platforms": platforms, "homepages_checked": homepages, "homepage_profiles": len(profiles), "communication_count": len(communications), "communication_error": diagnostic.get("error")}}
     snapshot = read_profile_snapshot()
     snapshot[language] = data
     save_profile_snapshot(snapshot)
