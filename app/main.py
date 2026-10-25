@@ -793,6 +793,8 @@ async def discover_other_party_profiles(member_rows):
                         report["modal_match_diagnostics"] = match_diagnostics
                         report["modal_matched"] = len(matches)
                         report["modal_link_samples"] = modal_samples
+                    evp_samples = []
+                    evp_match_diagnostics = []
                     for href in parser.links:
                         url = urljoin(roster_url, href)
                         parsed = urlparse(url)
@@ -815,8 +817,24 @@ async def discover_other_party_profiles(member_rows):
                             if not on_party_site or not parsed.path.startswith(prefix):
                                 continue
                             path_key = key(parsed.path.rstrip("/").split("/")[-1])
-                        if group == "EVP" and path_key.startswith("nr"):
-                            path_key = path_key[2:]
+                        if group == "EVP":
+                            # EVP profile paths use nr-<full-name>; Parliament's
+                            # party abbreviations may differ, so compare against
+                            # every active member with a unique full-name match.
+                            if len(evp_samples) < 20:
+                                evp_samples.append({"url": url[:300], "path_key": path_key})
+                            if path_key.startswith("nr"):
+                                path_key = path_key[2:]
+                            candidate_records = active_members_by_key.get(path_key, [])
+                            if len(evp_match_diagnostics) < 20:
+                                evp_match_diagnostics.append({
+                                    "url": url[:300], "normalized_key": path_key,
+                                    "candidate_count": len(candidate_records),
+                                    "candidate_names": [name for _, name in candidate_records[:3]],
+                                })
+                            if len(candidate_records) == 1:
+                                matches[candidate_records[0][0]] = url.split("?", 1)[0].split("#", 1)[0]
+                            continue
                         if not path_key:
                             continue
                         # GLP uses /personen/<name>/; only accept exact unique
@@ -840,6 +858,10 @@ async def discover_other_party_profiles(member_rows):
                     else:
                         discovered.update(matches)
                     report.update({"status": "parsed", "matched": len(matches), "links": len(parser.links)})
+                    if group == "EVP":
+                        report["profile_url_samples"] = evp_samples
+                        report["match_diagnostics"] = evp_match_diagnostics
+                        report["active_evp_members"] = [name for _, name in members.get("EVP", [])]
                     if group == "FDP":
                         report["profile_url_samples"] = fdp_profile_samples
                         report["link_samples"] = [urljoin(roster_url, href)[:250] for href in parser.links[:12]]
