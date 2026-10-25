@@ -443,7 +443,7 @@ def save_profile_snapshot(snapshot):
 async def social_profiles_cached(language: str = Query("DE", pattern="^(DE|FR|IT|RM)$")):
     """Return the last saved profiles without network requests."""
     snapshot = read_profile_snapshot().get(language, {})
-    return {"profiles": snapshot.get("profiles", {}), "updated_at": snapshot.get("updated_at"), "cached": True, "debug": snapshot.get("debug", {})}
+    return {"profiles": snapshot.get("profiles", {}), "profiles_by_source": snapshot.get("profiles_by_source", {}), "updated_at": snapshot.get("updated_at"), "cached": True, "debug": snapshot.get("debug", {})}
 
 @app.get("/api/social-profiles/refresh")
 async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|IT|RM)$")):
@@ -452,6 +452,8 @@ async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|I
     ids = {str(pick(row, "PersonNumber")) for row in rows if is_current(row)}
     communications, diagnostic = await fetch_communications(language, ids)
     profiles, homepages = await homepage_profiles(communications)
+    personal_profiles = {number: dict(links) for number, links in profiles.items()}
+    parliament_profiles = communication_profiles(communications)
     party_links, party_diagnostic = await party_profile_links(rows)
     party_added = 0
     for number, links in party_links.items():
@@ -460,6 +462,15 @@ async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|I
             party_added += 1
         for platform, url in links.items():
             existing.setdefault(platform, url)
+    by_source = {}
+    for number in ids:
+        sources = {
+            "Parlament-Homepage": parliament_profiles.get(number, {}),
+            "Partei-Homepage": party_links.get(number, {}),
+            "Parlamentarier-Homepage": personal_profiles.get(number, {}),
+        }
+        if any(sources.values()):
+            by_source[number] = sources
     member_homepages = {str(row.get("PersonNumber")) for row in communications if str(row.get("CommunicationTypeText", "")).lower() in ("homepage", "page d'accueil", "sito internet") and homepage_url(row.get("Address"))}
     missing = {
         "members_total": len(ids),
@@ -470,7 +481,7 @@ async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|I
         "members_without_social_profiles": len(ids - set(profiles)),
     }
     platforms = {platform: sum(platform in links for links in profiles.values()) for platform in _social_domains}
-    data = {"profiles": profiles, "updated_at": datetime.now(timezone.utc).isoformat(), "cached": False, "debug": {"party_sources": party_diagnostic, "party_members_added": party_added, "coverage": missing, "platforms": platforms, "homepages_checked": homepages, "homepage_profiles": len(profiles), "communication_count": len(communications), "communication_error": diagnostic.get("error")}}
+    data = {"profiles": profiles, "profiles_by_source": by_source, "updated_at": datetime.now(timezone.utc).isoformat(), "cached": False, "debug": {"party_sources": party_diagnostic, "party_members_added": party_added, "coverage": missing, "platforms": platforms, "homepages_checked": homepages, "homepage_profiles": len(profiles), "communication_count": len(communications), "communication_error": diagnostic.get("error")}}
     snapshot = read_profile_snapshot()
     snapshot[language] = data
     save_profile_snapshot(snapshot)
