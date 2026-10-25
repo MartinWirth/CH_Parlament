@@ -197,8 +197,20 @@ async def person_communications_diagnostic(person_number: int = Query(4100, ge=1
                 response.raise_for_status()
                 payload = response.json()
                 data = payload.get("d", payload)
-                rows = data.get("results", []) if isinstance(data, dict) else []
+                rows = data.get("results", []) if isinstance(data, dict) else data if isinstance(data, list) else []
                 result[label] = {
+                    "response_structure": {
+                        "root_type": type(payload).__name__,
+                        "root_keys": list(payload)[:15] if isinstance(payload, dict) else [],
+                        "d_type": type(data).__name__,
+                        "d_keys": list(data)[:15] if isinstance(data, dict) else [],
+                        "results_type": type(data.get("results")).__name__ if isinstance(data, dict) else None,
+                        "results_length": len(data.get("results")) if isinstance(data, dict) and isinstance(data.get("results"), list) else None,
+                        "value_type": type(data.get("value")).__name__ if isinstance(data, dict) else None,
+                        "value_length": len(data.get("value")) if isinstance(data, dict) and isinstance(data.get("value"), list) else None,
+                        "response_bytes": len(response.content),
+                        "content_type": response.headers.get("content-type"),
+                    },
                     "status": response.status_code,
                     "count": len(rows),
                     "sample": [{"PersonNumber": x.get("PersonNumber"), "Language": x.get("Language"), "ID": x.get("ID"), "navigation_available": bool(isinstance(x.get("PersonCommunications"), dict) and x["PersonCommunications"].get("__deferred", {}).get("uri"))} for x in rows[:3]],
