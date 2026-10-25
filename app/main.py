@@ -504,7 +504,11 @@ async def discover_sp_party_profiles(member_rows):
 async def discover_other_party_profiles(member_rows):
     """Match official party roster links to active members, without guessing URLs."""
     rosters = {
-        "FDP": [("https://www.fdp.ch/partei/organe/fraktion/", "fdp.ch", "/partei/organe/fraktion/fraktion-detail/members/user/")],
+        "FDP": [
+            ("https://www.fdp.ch/partei/organe/fraktion/", "fdp.ch", "/partei/organe/fraktion/fraktion-detail/members/user/"),
+            ("https://www.fdp.ch/personen/nationalraete", "fdp.ch", "/personen/nationalraete/nationalrat-detail/members/user/"),
+            ("https://www.fdp.ch/personen/staenderaete", "fdp.ch", "/personen/staenderaete/staenderat-detail/members/user/"),
+        ],
         "SVP": [("https://www.svp.ch/menschen/personen/", "svp.ch", "/menschen/portrait/")],
         "Mitte": [("https://die-mitte.ch/die-mitte/menschen/", "die-mitte.ch", "/")],
         "Gruene": [("https://gruene.ch/gruene-im-bundeshaus", "gruene.ch", "/")],
@@ -525,7 +529,7 @@ async def discover_other_party_profiles(member_rows):
         for group, roster_list in rosters.items():
             for roster_url, host, prefix in roster_list:
                 report = {"status": "pending", "matched": 0, "url": roster_url}
-                diagnostics[group] = report
+                diagnostics.setdefault(group, {"status": "pending", "matched": 0, "rosters": []})["rosters"].append(report)
                 try:
                     response = await client.get(roster_url)
                     response.raise_for_status()
@@ -560,8 +564,12 @@ async def discover_other_party_profiles(member_rows):
                             matches[candidates[0]] = url.split("?", 1)[0].split("#", 1)[0]
                     discovered.update(matches)
                     report.update({"status": "parsed", "matched": len(matches), "links": len(parser.links)})
+                    diagnostics[group]["matched"] = len([number for number in discovered if number in {n for n, _ in members.get(group, [])}])
+                    diagnostics[group]["status"] = "parsed"
                 except (httpx.HTTPError, ValueError) as exc:
                     report.update({"status": "fetch_failed", "error": str(exc)[:150]})
+                    if diagnostics[group]["status"] != "parsed":
+                        diagnostics[group]["status"] = "fetch_failed"
     return discovered, diagnostics
 
 
