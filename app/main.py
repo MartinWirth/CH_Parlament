@@ -718,6 +718,7 @@ async def discover_other_party_profiles(member_rows):
             ("https://www.fdp.ch/personen/staenderaete", "fdp.ch", "/personen/staenderaete/staenderat-detail/members/user/"),
         ],
         "SVP": [("https://www.svp.ch/menschen/personen/", "svp.ch", "/menschen/portrait/")],
+        "EVP": [("https://www.evppev.ch/menschen/nationalrat-und-fraktion", "evppev.ch", "/menschen/nationalrat-und-fraktion/")],
         "Mitte": [("https://die-mitte.ch/die-mitte/menschen/", "die-mitte.ch", "/")],
         "Gruene": [("https://gruene.ch/gruene-im-bundeshaus", "gruene.ch", "/")],
         "GLP": [
@@ -735,7 +736,7 @@ async def discover_other_party_profiles(member_rows):
             continue
         name = normalize(row)["name"]
         party = str(pick(row, "PartyAbbreviation", "PartyName")).upper()
-        group = "FDP" if party in ("FDP", "PLR") else "SVP" if party in ("SVP", "UDC") else "Mitte" if party in ("M-E", "MITTE", "CVP", "PDC") else "Gruene" if party in ("GPS", "PES", "GRÜNE", "GRUENE") else "GLP" if party in ("GLP", "PVL") else None
+        group = "FDP" if party in ("FDP", "PLR") else "SVP" if party in ("SVP", "UDC") else "Mitte" if party in ("M-E", "MITTE", "CVP", "PDC") else "Gruene" if party in ("GPS", "PES", "GRÜNE", "GRUENE") else "GLP" if party in ("GLP", "PVL") else "EVP" if party in ("EVP", "PEV") else None
         if group:
             members.setdefault(group, []).append((str(pick(row, "PersonNumber")), name))
     # FDP abbreviations vary across Parliament API records. A unique full-name
@@ -814,6 +815,8 @@ async def discover_other_party_profiles(member_rows):
                             if not on_party_site or not parsed.path.startswith(prefix):
                                 continue
                             path_key = key(parsed.path.rstrip("/").split("/")[-1])
+                        if group == "EVP" and path_key.startswith("nr"):
+                            path_key = path_key[2:]
                         if not path_key:
                             continue
                         # GLP uses /personen/<name>/; only accept exact unique
