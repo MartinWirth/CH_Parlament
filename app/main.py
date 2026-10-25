@@ -12,7 +12,7 @@ import unicodedata
 from html.parser import HTMLParser
 from urllib.parse import urljoin, parse_qs
 import xml.etree.ElementTree as ET
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 import httpx
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
@@ -287,6 +287,18 @@ def verified_social_url(value):
     return None
 
 
+def canonical_homepage_url(value):
+    """Normalize Unicode hostnames without changing the URL path or query."""
+    parsed = urlparse(value)
+    if not parsed.hostname or parsed.username or parsed.password:
+        raise ValueError("Invalid homepage authority")
+    host = parsed.hostname.encode("idna").decode("ascii").lower()
+    if ":" in host:  # IPv6 literal
+        host = f"[{host}]"
+    netloc = host + (f":{parsed.port}" if parsed.port is not None else "")
+    return urlunparse(parsed._replace(netloc=netloc))
+
+
 def homepage_url(value):
     if not isinstance(value, str):
         return None
@@ -300,7 +312,7 @@ def homepage_url(value):
     parsed = urlparse(value)
     if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or parsed.port not in (None, 443):
         return None
-    return value
+    return canonical_homepage_url(value)
 
 
 def public_hostname(host):
@@ -318,7 +330,7 @@ def same_site_www_redirect(original_host, target_host):
     def bare(host):
         host = host.lower().rstrip(".")
         return host[4:] if host.startswith("www.") else host
-    return bare(original_host) == bare(target_host)
+    return bare(original_host.encode("idna").decode("ascii")) == bare(target_host.encode("idna").decode("ascii"))
 
 
 async def scan_homepage(client, url, semaphore, diagnostic=None):
@@ -336,34 +348,37 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                 if diagnostic is not None:
                     diagnostic["status"] = "hostname_not_public"
                 return found
-            current = url
+            current = canonical_homepage_url(url)
             for _ in range(3):
                 response = None
-                for attempt in range(3):
+                for attempt in range(2):
                     try:
                         response = await client.get(current, follow_redirects=False)
                         break
                     except (httpx.TimeoutException, httpx.ConnectError) as exc:
                         if diagnostic is not None:
                             diagnostic.setdefault("retry_errors", []).append(type(exc).__name__)
-                        if attempt == 2:
+                        if attempt == 1:
                             raise
-                        await asyncio.sleep(0.25 * (attempt + 1))
+                        await asyncio.sleep(0.2)
                 if response is not None:
                     if diagnostic is not None:
                         diagnostic.update({"http_status": response.status_code, "final_url": current})
                     if response.status_code in (301, 302, 303, 307, 308):
-                        target = urljoin(current, response.headers.get("location", ""))
+                        target = canonical_homepage_url(urljoin(current, response.headers.get("location", "")))
                         parsed = urlparse(target)
                         if diagnostic is not None:
                             diagnostic["redirects"].append(target)
+                            diagnostic["redirect_target_host"] = parsed.hostname
                         if parsed.scheme != "https" or not same_site_www_redirect(original.hostname, parsed.hostname) or parsed.port not in (None, 443) or parsed.username or parsed.password:
                             if diagnostic is not None:
                                 diagnostic["status"] = "redirect_blocked"
+                                diagnostic["redirect_reason"] = "https_same_site_www_only"
                             return found
                         if not await asyncio.to_thread(public_hostname, parsed.hostname):
                             if diagnostic is not None:
                                 diagnostic["status"] = "redirect_hostname_not_public"
+                                diagnostic["redirect_reason"] = "target_hostname_not_public"
                             return found
                         current = target
                         continue
@@ -474,6 +489,8 @@ async def homepage_profiles(communications, member_names=None):
             "reason": reason,
             "fetch_status": status,
             "retry_errors": diagnostic.get("retry_errors", []),
+            "redirect_reason": diagnostic.get("redirect_reason"),
+            "redirect_target_host": diagnostic.get("redirect_target_host"),
             "candidate_count": len(candidates),
             "candidate_samples": candidates[:5],
         })
