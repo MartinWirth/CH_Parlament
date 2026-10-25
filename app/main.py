@@ -178,15 +178,19 @@ class SocialLinkParser(HTMLParser):
         self._json_ld = False
         self._json_chunks = []
         self._excluded_tags = []
+        self.link_diagnostics = {"anchors_total": 0, "excluded_links": 0, "social_candidates": 0}
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
         excluded = tag in ("footer", "nav") or (tag in ("div", "section") and any(word in (attrs.get("class", "")+" "+attrs.get("id", "")).lower().split() for word in ("footer", "site-footer", "main-footer")))
         if self._excluded_tags or excluded:
+            if tag == "a" and attrs.get("href"):
+                self.link_diagnostics["excluded_links"] += 1
             if tag not in ("meta", "link", "img", "input", "br", "hr", "source", "area"):
                 self._excluded_tags.append(tag)
             return
         if tag == "a" and attrs.get("href"):
+            self.link_diagnostics["anchors_total"] += 1
             self.links.append(attrs["href"])
         elif tag == "link" and "me" in attrs.get("rel", "").lower().split() and attrs.get("href"):
             self.links.append(attrs["href"])
@@ -348,10 +352,16 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                             return found
                 parser = SocialLinkParser()
                 parser.feed(content.decode("utf-8", errors="replace"))
+                if diagnostic is not None:
+                    diagnostic["html_bytes"] = len(content)
+                    diagnostic["parser"] = dict(parser.link_diagnostics)
+                    diagnostic["parser"]["candidate_urls"] = len(parser.links) + len(list(parser.social_references()))
                 for href in list(parser.links) + list(parser.social_references()):
                     target = urljoin(current, href)
                     platform = verified_social_url(target)
                     if platform:
+                        if diagnostic is not None:
+                            diagnostic["parser"]["social_candidates"] += 1
                         found.setdefault(platform, target)
                 if diagnostic is not None:
                     diagnostic["status"] = "parsed"
