@@ -368,13 +368,36 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                 if diagnostic is not None:
                     diagnostic["status"] = "hostname_not_public"
                 return found
+            stage = "request"
+            alternate_tried = set()
             for _ in range(3):
                 response = None
                 for attempt in range(2):
                     try:
+                        stage = "http_get"
                         response = await client.get(current, follow_redirects=False)
                         break
-                    except (httpx.TimeoutException, httpx.ConnectError) as exc:
+                    except httpx.ConnectError as exc:
+                        # Retry only a certificate-related failure, never bypass TLS.
+                        certificate_error = "certificate" in str(exc).lower() or "hostname mismatch" in str(exc).lower()
+                        parsed_current = urlparse(current)
+                        host = parsed_current.hostname or ""
+                        alternate_host = host[4:] if host.startswith("www.") else "www." + host
+                        alternate = None
+                        if certificate_error and host and same_site_www_redirect(host, alternate_host):
+                            alternate = canonical_homepage_url(urlunparse(parsed_current._replace(netloc=alternate_host)))
+                        if alternate and alternate not in alternate_tried and await asyncio.to_thread(public_hostname, alternate_host):
+                            alternate_tried.add(alternate)
+                            if diagnostic is not None:
+                                diagnostic.setdefault("tls_fallbacks", []).append({"from": current, "to": alternate, "reason": "certificate_validation_failed"})
+                            current = alternate
+                            continue
+                        if diagnostic is not None:
+                            diagnostic.setdefault("retry_errors", []).append(type(exc).__name__)
+                        if attempt == 1:
+                            raise
+                        await asyncio.sleep(0.2)
+                    except httpx.TimeoutException as exc:
                         if diagnostic is not None:
                             diagnostic.setdefault("retry_errors", []).append(type(exc).__name__)
                         if attempt == 1:
@@ -384,19 +407,23 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                     if diagnostic is not None:
                         diagnostic.update({"http_status": response.status_code, "final_url": current})
                     if response.status_code in (301, 302, 303, 307, 308):
+                        stage = "redirect_location"
                         location = response.headers.get("location", "").strip()
                         if not location or any(ord(c) < 32 for c in location):
                             if diagnostic is not None:
                                 diagnostic["status"] = "redirect_invalid_location"
                             return found
                         try:
+                            stage = "redirect_urljoin"
                             joined = urljoin(current, location)
+                            stage = "redirect_canonicalize"
                             target = canonical_homepage_url(joined)
                         except (ValueError, UnicodeError) as exc:
                             if diagnostic is not None:
                                 diagnostic["status"] = "redirect_invalid_location"
                                 diagnostic["error_detail"] = str(exc)[:240]
                             return found
+                        stage = "redirect_validate"
                         parsed = urlparse(target)
                         if diagnostic is not None:
                             diagnostic["redirects"].append(target)
@@ -423,6 +450,7 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                             diagnostic["status"] = "html_too_large"
                             diagnostic["html_bytes"] = len(content)
                         return found
+                stage = "parse_html"
                 parser = SocialLinkParser()
                 html_text = content.decode("utf-8", errors="replace")
                 parser.feed(html_text)
@@ -443,7 +471,13 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                 if diagnostic is not None:
                     diagnostic["social_url_candidates"] = []
                 for href in candidate_links:
-                    target = urljoin(current, href)
+                    stage = "social_link_urljoin"
+                    try:
+                        target = urljoin(current, href)
+                    except ValueError:
+                        if diagnostic is not None:
+                            diagnostic["invalid_social_link_count"] = diagnostic.get("invalid_social_link_count", 0) + 1
+                        continue
                     platform = verified_social_url(target)
                     if platform:
                         if diagnostic is not None:
@@ -463,6 +497,7 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                 diagnostic["status"] = type(exc).__name__
                 diagnostic["error_detail"] = str(exc)[:240]
                 diagnostic["error_stage_url"] = current if "current" in locals() else url
+                diagnostic["error_stage"] = stage if "stage" in locals() else "initial_url"
                 if "certificate" in str(exc).lower():
                     diagnostic["ssl_hint"] = "check_valid_certificate_on_alternate_www_hostname"
         _homepage_cache[url] = (time.time(), found)
