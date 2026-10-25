@@ -110,3 +110,18 @@ def test_prioritize_missing_homepages():
     ordered = prioritize_missing_homepages(details)
     assert [row["name"] for row in ordered] == ["Redirect", "Timeout", "Candidates", "No links"]
     assert [row["name"] for row in details] == ["No links", "Candidates", "Timeout", "Redirect"]
+
+
+def test_verified_personal_site_redirects(monkeypatch):
+    from app.main import approved_homepage_redirect
+    monkeypatch.delenv("APPROVED_HOMEPAGE_REDIRECTS", raising=False)
+    for source, target in (
+        ("andrisilberschmidt.ch", "silberschmidt2027.ch"),
+        ("marc-jost.ch", "marcjost.ch"),
+        ("susanne-vincenz-stauffacher.ch", "vincenz-stauffacher.ch"),
+    ):
+        assert approved_homepage_redirect(source, target)
+        assert approved_homepage_redirect("www." + source, "www." + target)
+        assert not approved_homepage_redirect(source, "attacker.example")
+        assert not approved_homepage_redirect("fake." + source, target)
+    assert not approved_homepage_redirect("unknown.example", "marcjost.ch")
