@@ -289,13 +289,18 @@ def verified_social_url(value):
 
 def canonical_homepage_url(value):
     """Normalize Unicode hostnames without changing the URL path or query."""
-    parsed = urlparse(value)
-    if not parsed.hostname or parsed.username or parsed.password:
-        raise ValueError("Invalid homepage authority")
-    host = parsed.hostname.encode("idna").decode("ascii").lower()
+    try:
+        parsed = urlparse(value)
+        host = parsed.hostname
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("Malformed homepage URL authority") from exc
+    if parsed.scheme != "https" or not host or parsed.username or parsed.password or port not in (None, 443):
+        raise ValueError("Invalid HTTPS homepage authority")
+    host = host.encode("idna").decode("ascii").lower()
     if ":" in host:  # IPv6 literal
         host = f"[{host}]"
-    netloc = host + (f":{parsed.port}" if parsed.port is not None else "")
+    netloc = host + (f":{port}" if port is not None else "")
     return urlunparse(parsed._replace(netloc=netloc))
 
 
@@ -888,18 +893,24 @@ async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|I
         old = previous_profiles.get(number, {})
         if not isinstance(old, dict):
             continue
-        current = profiles.setdefault(number, {})
+        current = profiles.get(number, {})
         for platform, link in old.items():
             if platform in _social_domains and platform not in current and isinstance(link, str) and verified_social_url(link):
+                if number not in profiles:
+                    profiles[number] = current
                 current[platform] = link
                 retained += 1
     party_added = 0
     for number, links in party_links.items():
+        if not links:
+            continue
         existing = profiles.setdefault(number, {})
         if not existing:
             party_added += 1
         for platform, url in links.items():
             existing.setdefault(platform, url)
+    # Empty dictionaries are not social profiles and must never count as coverage.
+    profiles = {number: links for number, links in profiles.items() if number in ids and links}
     by_source = {}
     for number in ids:
         sources = {
