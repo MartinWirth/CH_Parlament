@@ -716,7 +716,7 @@ async def discover_other_party_profiles(member_rows):
         "SVP": [("https://www.svp.ch/menschen/personen/", "svp.ch", "/menschen/portrait/")],
         "Mitte": [("https://die-mitte.ch/die-mitte/menschen/", "die-mitte.ch", "/")],
         "Gruene": [("https://gruene.ch/gruene-im-bundeshaus", "gruene.ch", "/")],
-        "GLP": [("https://grunliberale.ch/position-person/nationalrat/", "grunliberale.ch", "/personen/")],
+        "GLP": [("https://glp.swiss/position-person/nationalrat/", "glp.swiss", "/personen/")],
     }
     def key(value):
         return "".join(c for c in unicodedata.normalize("NFKD", value.casefold()) if c.isascii() and c.isalnum())
