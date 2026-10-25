@@ -92,6 +92,51 @@ async def fetch_members(language="DE"):
     return rows
 
 
+async def fetch_communications(language):
+    """Read public person communications; failure must not block the member list."""
+    url = f"{API.rstrip('/')}/PersonCommunication"
+    try:
+        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+            response = await client.get(url, params={"$format": "json", "$filter": f"Language eq '{language}'", "$top": 1000})
+            response.raise_for_status()
+            payload = response.json()
+            data = payload.get("d", payload)
+            rows = data.get("results", []) if isinstance(data, dict) and "results" in data else data.get("value", []) if isinstance(data, dict) else []
+            logger.info("PersonCommunication rows=%d sample_keys=%s", len(rows), list(rows[0]) if rows else [])
+            return rows
+    except (httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
+        logger.warning("PersonCommunication unavailable: %s", exc)
+        return []
+
+
+def communication_profiles(rows):
+    """Match only explicit social-network URLs and a person number."""
+    domains = {
+        "X": ("x.com", "twitter.com"),
+        "Facebook": ("facebook.com", "fb.com"),
+        "Instagram": ("instagram.com",),
+        "LinkedIn": ("linkedin.com",),
+        "YouTube": ("youtube.com", "youtu.be"),
+    }
+    result = {}
+    for row in rows:
+        number = pick(row, "PersonNumber")
+        if not number:
+            continue
+        for key in ("Value", "Communication", "Address", "Url", "URL", "CommunicationValue", "Contact"):
+            value = row.get(key)
+            if not isinstance(value, str):
+                continue
+            parsed = urlparse(value.strip())
+            host = (parsed.hostname or "").lower()
+            if parsed.scheme != "https" or not host or parsed.username or parsed.password:
+                continue
+            for platform, allowed in domains.items():
+                if any(host == domain or host.endswith("." + domain) for domain in allowed):
+                    result.setdefault(str(number), {})[platform] = value.strip()
+    return result
+
+
 @app.get("/")
 def index():
     return FileResponse(ROOT / "static" / "index.html")
@@ -104,13 +149,17 @@ async def members(language: str = Query("DE", pattern="^(DE|FR|IT|RM)$")):
     except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
         logger.exception("Member API request failed")
         raise HTTPException(status_code=502, detail=f"Parlamentsdienst nicht erreichbar: {exc}") from exc
+    communications = await fetch_communications(language)
+    profiles = communication_profiles(communications)
     result = [normalize(row) for row in rows if is_current(row)]
+    for member in result:
+        member["socialmedia"].update(profiles.get(member["id"], {}))
     logger.info("Members normalized raw=%d current=%d sample=%s", len(rows), len(result), result[0] if result else None)
     # One member can appear in several records; preserve distinct council memberships.
     unique = {(item["id"], item["rat"]): item for item in result if item["name"]}
     logger.info("Members returned unique=%d", len(unique))
     return {
-        "debug": {"raw_count": len(rows), "current_count": len(result), "unique_count": len(unique), "sample_keys": list(rows[0].keys()) if rows else [], "active_sample": [{"Active": r.get("Active"), "DateLeaving": r.get("DateLeaving")} for r in rows[:3]], "social_profiles": sum(bool(m["socialmedia"]) for m in unique.values())},
+        "debug": {"raw_count": len(rows), "current_count": len(result), "unique_count": len(unique), "sample_keys": list(rows[0].keys()) if rows else [], "active_sample": [{"Active": r.get("Active"), "DateLeaving": r.get("DateLeaving")} for r in rows[:3]], "social_profiles": sum(bool(m["socialmedia"]) for m in unique.values()), "communication_count": len(communications), "communication_sample_keys": list(communications[0]) if communications else []},
         "data_language": language,
         "source": "Parlamentsdienste der Bundesversammlung, Bern",
         "retrieved_at": datetime.now(timezone.utc).isoformat(),
