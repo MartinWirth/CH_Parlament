@@ -716,6 +716,7 @@ async def discover_other_party_profiles(member_rows):
         "SVP": [("https://www.svp.ch/menschen/personen/", "svp.ch", "/menschen/portrait/")],
         "Mitte": [("https://die-mitte.ch/die-mitte/menschen/", "die-mitte.ch", "/")],
         "Gruene": [("https://gruene.ch/gruene-im-bundeshaus", "gruene.ch", "/")],
+        "GLP": [("https://grunliberale.ch/position-person/nationalrat/", "grunliberale.ch", "/personen/")],
     }
     def key(value):
         return "".join(c for c in unicodedata.normalize("NFKD", value.casefold()) if c.isascii() and c.isalnum())
@@ -725,7 +726,7 @@ async def discover_other_party_profiles(member_rows):
             continue
         name = normalize(row)["name"]
         party = str(pick(row, "PartyAbbreviation", "PartyName")).upper()
-        group = "FDP" if party in ("FDP", "PLR") else "SVP" if party in ("SVP", "UDC") else "Mitte" if party in ("M-E", "MITTE", "CVP", "PDC") else "Gruene" if party in ("GPS", "PES", "GRÜNE", "GRUENE") else None
+        group = "FDP" if party in ("FDP", "PLR") else "SVP" if party in ("SVP", "UDC") else "Mitte" if party in ("M-E", "MITTE", "CVP", "PDC") else "Gruene" if party in ("GPS", "PES", "GRÜNE", "GRUENE") else "GLP" if party in ("GLP", "PVL") else None
         if group:
             members.setdefault(group, []).append((str(pick(row, "PersonNumber")), name))
     # FDP abbreviations vary across Parliament API records. A unique full-name
@@ -806,6 +807,8 @@ async def discover_other_party_profiles(member_rows):
                             path_key = key(parsed.path.rstrip("/").split("/")[-1])
                         if not path_key:
                             continue
+                        # GLP uses /personen/<name>/; only accept exact unique
+                        # names of current GLP members, never inferred URLs.
                         candidates = [number for number, name in members.get(group, []) if key(name) == path_key]
                         if len(candidates) == 1:
                             matches[candidates[0]] = url.split("?", 1)[0].split("#", 1)[0]
