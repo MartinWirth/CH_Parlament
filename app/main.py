@@ -93,39 +93,46 @@ async def fetch_members(language="DE"):
     return rows
 
 
-async def fetch_communications(language):
-    """Fetch communication records and return diagnostic counts without exposing addresses."""
+async def fetch_communications(language, person_numbers=None):
+    """Page through communications, retaining only records for current members."""
     url = f"{API.rstrip('/')}/PersonCommunication"
     rows, seen = [], set()
-    diagnostic = {"http_status": None, "raw_count": 0, "languages": {}, "communication_types": {}, "error": None}
+    page_size, max_pages = 1000, 20
+    diagnostic = {"http_status": None, "raw_count": 0, "languages": {}, "communication_types": {}, "error": None, "pages": 0, "truncated": False, "matched_members": 0}
+    allowed = {str(n) for n in person_numbers} if person_numbers is not None else None
     try:
         async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
-            while url and len(seen) < 30:
-                if url in seen:
-                    break
-                seen.add(url)
-                response = await client.get(url, params={"$format": "json", "$top": 1000} if len(seen) == 1 else None)
+            for page_number in range(max_pages):
+                params = {"$format": "json", "$top": page_size, "$skip": page_number * page_size}
+                response = await client.get(url, params=params)
                 diagnostic["http_status"] = response.status_code
                 response.raise_for_status()
                 payload = response.json()
                 data = payload.get("d", payload)
                 page = data if isinstance(data, list) else data.get("results", data.get("value", [])) if isinstance(data, dict) else []
-                rows.extend(page)
-                next_url = (data.get("__next") or data.get("@odata.nextLink")) if isinstance(data, dict) else None
-                url = str(httpx.URL(url).join(next_url)) if next_url else None
-        diagnostic["raw_count"] = len(rows)
-        for row in rows:
-            lang = str(row.get("Language", ""))
-            kind = str(row.get("CommunicationTypeText") or row.get("CommunicationType") or "")
-            diagnostic["languages"][lang] = diagnostic["languages"].get(lang, 0) + 1
-            diagnostic["communication_types"][kind] = diagnostic["communication_types"].get(kind, 0) + 1
-        selected = [row for row in rows if str(row.get("Language", "")).upper() == language]
-        logger.info("PersonCommunication diagnostic=%s filtered=%d", diagnostic, len(selected))
-        return selected, diagnostic
+                if not isinstance(page, list):
+                    raise ValueError("Unexpected PersonCommunication response structure")
+                diagnostic["pages"] += 1
+                diagnostic["raw_count"] += len(page)
+                for row in page:
+                    lang = str(row.get("Language", ""))
+                    kind = str(row.get("CommunicationTypeText") or row.get("CommunicationType") or "")
+                    diagnostic["languages"][lang] = diagnostic["languages"].get(lang, 0) + 1
+                    diagnostic["communication_types"][kind] = diagnostic["communication_types"].get(kind, 0) + 1
+                    if lang.upper() == language and (allowed is None or str(row.get("PersonNumber")) in allowed):
+                        rows.append(row)
+                if len(page) < page_size:
+                    break
+            else:
+                diagnostic["truncated"] = True
+        diagnostic["matched_members"] = len({str(row.get("PersonNumber")) for row in rows})
+        logger.info("PersonCommunication diagnostic=%s selected=%d", diagnostic, len(rows))
+        return rows, diagnostic
     except (httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
         diagnostic["error"] = str(exc)[:300]
         logger.warning("PersonCommunication diagnostic=%s", diagnostic)
-        return [], diagnostic
+        return rows, diagnostic
+
 
 def communication_profiles(rows):
     """Match only explicit social-network URLs and a person number."""
@@ -167,9 +174,9 @@ async def members(language: str = Query("DE", pattern="^(DE|FR|IT|RM)$")):
     except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
         logger.exception("Member API request failed")
         raise HTTPException(status_code=502, detail=f"Parlamentsdienst nicht erreichbar: {exc}") from exc
-    communications, communication_debug = await fetch_communications(language)
-    profiles = communication_profiles(communications)
     result = [normalize(row) for row in rows if is_current(row)]
+    communications, communication_debug = await fetch_communications(language, {member["id"] for member in result})
+    profiles = communication_profiles(communications)
     for member in result:
         member["socialmedia"].update(profiles.get(member["id"], {}))
     logger.info("Members normalized raw=%d current=%d sample=%s", len(rows), len(result), result[0] if result else None)
