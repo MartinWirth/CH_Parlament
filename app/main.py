@@ -351,12 +351,24 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                                 diagnostic["status"] = "html_too_large"
                             return found
                 parser = SocialLinkParser()
-                parser.feed(content.decode("utf-8", errors="replace"))
+                html_text = content.decode("utf-8", errors="replace")
+                parser.feed(html_text)
+                raw_social = []
+                for match in re.findall(r'https?://[^\\s"<>]{5,250}', html_text, flags=re.I):
+                    candidate = match.replace("\\\\/", "/").rstrip("),;")
+                    if verified_social_url(candidate) and candidate not in raw_social:
+                        raw_social.append(candidate)
+                if diagnostic is not None:
+                    diagnostic["raw_social_urls"] = raw_social[:40]
+                    diagnostic["raw_social_count"] = len(raw_social)
                 if diagnostic is not None:
                     diagnostic["html_bytes"] = len(content)
                     diagnostic["parser"] = dict(parser.link_diagnostics)
                     diagnostic["parser"]["candidate_urls"] = len(parser.links) + len(list(parser.social_references()))
-                for href in list(parser.links) + list(parser.social_references()):
+                candidate_links = list(parser.links) + list(parser.social_references())
+                if diagnostic is not None:
+                    candidate_links += raw_social
+                for href in candidate_links:
                     target = urljoin(current, href)
                     platform = verified_social_url(target)
                     if platform:
