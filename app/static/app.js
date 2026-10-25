@@ -30,15 +30,20 @@ debugPhaseButton.addEventListener("click",()=>{
 });
 function debug(message,data){const line=new Date().toISOString()+" "+message+(data===undefined?"":" "+JSON.stringify(data));console.info("[CH_Parlament]",line);logBox.textContent+=line+"\n";logBox.scrollTop=logBox.scrollHeight}
 async function copyDebugLog(){
+  // Focus the visible log before requesting clipboard access.
+  logBox.hidden=false;
+  if(!logBox.hasAttribute("tabindex"))logBox.tabIndex=0;
+  logBox.focus({preventScroll:true});
+  logBox.scrollTop=logBox.scrollHeight;
   try{
     await navigator.clipboard.writeText(logBox.textContent);
     console.info("[CH_Parlament] Debug-Log in Zwischenablage kopiert");
   }catch(err){
     console.warn("[CH_Parlament] Automatisches Kopieren nicht möglich",err);
-    debug("Zwischenablage: automatisches Kopieren blockiert; bitte Debug-Log anzeigen erneut klicken",{message:err.message});
+    debug("Zwischenablage: Kopieren blockiert; Browserfenster aktivieren und Debug-Log anzeigen erneut klicken",{message:err.message});
   }
 }
-document.querySelector("#debug-toggle").addEventListener("click",async e=>{logBox.hidden=!logBox.hidden;e.target.textContent=logBox.hidden?"Debug-Log anzeigen":"Debug-Log ausblenden";if(!logBox.hidden){try{await navigator.clipboard.writeText(logBox.textContent);debug("Debug-Log in Zwischenablage kopiert")}catch(err){debug("Zwischenablage konnte nicht beschrieben werden",{message:err.message})}}});
+document.querySelector("#debug-toggle").addEventListener("click",async e=>{logBox.hidden=!logBox.hidden;e.target.textContent=logBox.hidden?"Debug-Log anzeigen":"Debug-Log ausblenden";if(!logBox.hidden)await copyDebugLog()});
 document.querySelector("#debug-clear").addEventListener("click",()=>{logBox.textContent=""});
 debug("Frontend initialisiert");
 async function loadMembers(){
