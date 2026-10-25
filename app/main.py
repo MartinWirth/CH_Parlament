@@ -289,21 +289,30 @@ async def members(language: str = Query("DE", pattern="^(DE|FR|IT|RM)$")):
     result = [normalize(row) for row in rows if is_current(row)]
     communications, communication_debug = await fetch_communications(language, {member["id"] for member in result})
     profiles = communication_profiles(communications)
-    website_profiles, scanned_homepages = await homepage_profiles(communications)
     for member in result:
-        member["socialmedia"].update(website_profiles.get(member["id"], {}))
         member["socialmedia"].update(profiles.get(member["id"], {}))
     logger.info("Members normalized raw=%d current=%d sample=%s", len(rows), len(result), result[0] if result else None)
     # One member can appear in several records; preserve distinct council memberships.
     unique = {(item["id"], item["rat"]): item for item in result if item["name"]}
     logger.info("Members returned unique=%d", len(unique))
     return {
-        "debug": {"raw_count": len(rows), "current_count": len(result), "unique_count": len(unique), "sample_keys": list(rows[0].keys()) if rows else [], "active_sample": [{"Active": r.get("Active"), "DateLeaving": r.get("DateLeaving")} for r in rows[:3]], "social_profiles": sum(bool(m["socialmedia"]) for m in unique.values()), "homepages_checked": scanned_homepages, "homepage_profiles": len(website_profiles), "communication_count": len(communications), "communication_sample_keys": list(communications[0]) if communications else [], "communication_diagnostic": communication_debug},
+        "debug": {"raw_count": len(rows), "current_count": len(result), "unique_count": len(unique), "sample_keys": list(rows[0].keys()) if rows else [], "active_sample": [{"Active": r.get("Active"), "DateLeaving": r.get("DateLeaving")} for r in rows[:3]], "social_profiles": sum(bool(m["socialmedia"]) for m in unique.values()), "communication_count": len(communications), "communication_sample_keys": list(communications[0]) if communications else [], "communication_diagnostic": communication_debug},
         "data_language": language,
         "source": "Parlamentsdienste der Bundesversammlung, Bern",
         "retrieved_at": datetime.now(timezone.utc).isoformat(),
         "members": sorted(unique.values(), key=lambda m: m["name"].casefold()),
     }
+
+
+@app.get("/api/social-profiles")
+async def social_profiles_endpoint(language: str = Query("DE", pattern="^(DE|FR|IT|RM)$")):
+    """Optional enrichment; never blocks the initial members response."""
+    rows = await fetch_members(language)
+    ids = {str(pick(row, "PersonNumber")) for row in rows if is_current(row)}
+    communications, diagnostic = await fetch_communications(language, ids)
+    profiles, homepages = await homepage_profiles(communications)
+    logger.info("Social enrichment homepages=%d profiles=%d", homepages, len(profiles))
+    return {"profiles": profiles, "debug": {"homepages_checked": homepages, "homepage_profiles": len(profiles), "communication_count": len(communications), "communication_error": diagnostic.get("error")}}
 
 
 @app.get("/api/person-communications-diagnostic")
