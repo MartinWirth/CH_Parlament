@@ -327,16 +327,43 @@ async def members(language: str = Query("DE", pattern="^(DE|FR|IT|RM)$")):
     }
 
 
+_profile_snapshot_path = Path(os.getenv("SOCIAL_SNAPSHOT_PATH", str(ROOT.parent / ".social_profiles_snapshot.json")))
+
+def read_profile_snapshot():
+    try:
+        data = json.loads(_profile_snapshot_path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+def save_profile_snapshot(snapshot):
+    try:
+        temporary = _profile_snapshot_path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(snapshot, ensure_ascii=False), encoding="utf-8")
+        temporary.replace(_profile_snapshot_path)
+    except OSError as exc:
+        logger.warning("Unable to save social snapshot: %s", exc)
+
 @app.get("/api/social-profiles")
-async def social_profiles_endpoint(language: str = Query("DE", pattern="^(DE|FR|IT|RM)$")):
-    """Optional enrichment; never blocks the initial members response."""
+async def social_profiles_cached(language: str = Query("DE", pattern="^(DE|FR|IT|RM)$")):
+    """Return the last saved profiles without network requests."""
+    snapshot = read_profile_snapshot().get(language, {})
+    return {"profiles": snapshot.get("profiles", {}), "updated_at": snapshot.get("updated_at"), "cached": True, "debug": snapshot.get("debug", {})}
+
+@app.get("/api/social-profiles/refresh")
+async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|IT|RM)$")):
+    """Refresh profiles independently of the immediate cached response."""
     rows = await fetch_members(language)
     ids = {str(pick(row, "PersonNumber")) for row in rows if is_current(row)}
     communications, diagnostic = await fetch_communications(language, ids)
     profiles, homepages = await homepage_profiles(communications)
-    logger.info("Social enrichment homepages=%d profiles=%d", homepages, len(profiles))
     platforms = {platform: sum(platform in links for links in profiles.values()) for platform in _social_domains}
-    return {"profiles": profiles, "updated_at": datetime.now(timezone.utc).isoformat(), "debug": {"platforms": platforms, "homepages_checked": homepages, "homepage_profiles": len(profiles), "communication_count": len(communications), "communication_error": diagnostic.get("error")}}
+    data = {"profiles": profiles, "updated_at": datetime.now(timezone.utc).isoformat(), "cached": False, "debug": {"platforms": platforms, "homepages_checked": homepages, "homepage_profiles": len(profiles), "communication_count": len(communications), "communication_error": diagnostic.get("error")}}
+    snapshot = read_profile_snapshot()
+    snapshot[language] = data
+    save_profile_snapshot(snapshot)
+    logger.info("Social refresh complete homepages=%d profiles=%d", homepages, len(profiles))
+    return data
 
 
 @app.get("/api/person-communications-diagnostic")
