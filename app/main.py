@@ -444,6 +444,8 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
         except (httpx.HTTPError, ValueError, UnicodeError) as exc:
             if diagnostic is not None:
                 diagnostic["status"] = type(exc).__name__
+                diagnostic["error_detail"] = str(exc)[:240]
+                diagnostic["error_stage_url"] = current if "current" in locals() else url
         _homepage_cache[url] = (time.time(), found)
         return found
 
@@ -503,6 +505,8 @@ async def homepage_profiles(communications, member_names=None):
             "reason": reason,
             "fetch_status": status,
             "retry_errors": diagnostic.get("retry_errors", []),
+            "error_detail": diagnostic.get("error_detail"),
+            "error_stage_url": diagnostic.get("error_stage_url"),
             "redirect_reason": diagnostic.get("redirect_reason"),
             "redirect_target_host": diagnostic.get("redirect_target_host"),
             "candidate_count": len(candidates),
