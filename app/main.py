@@ -1534,9 +1534,15 @@ async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|I
     rejection_before = {key: value["count"] for key, value in _http_cache_rejections.items()}
     rejection_reason_before = {key: dict(value["reasons"]) for key, value in _http_cache_rejections.items()}
     refresh_started = time.monotonic()
+    phase_ms = {}
+    phase_started = time.monotonic()
     rows = await fetch_members(language)
+    phase_ms["fetch_members"] = round((time.monotonic() - phase_started) * 1000, 1)
     ids = {str(pick(row, "PersonNumber")) for row in rows if is_current(row)}
+    phase_started = time.monotonic()
     communications, diagnostic = await fetch_communications(language, ids)
+    phase_ms["fetch_communications"] = round((time.monotonic() - phase_started) * 1000, 1)
+    phase_started = time.monotonic()
     previous = read_profile_snapshot().get(language, {})
     from datetime import timedelta
     now = datetime.now(timezone.utc)
@@ -1573,9 +1579,13 @@ async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|I
         if str(row.get("PersonNumber")) not in reusable_homepages
         or str(row.get("CommunicationTypeText", "")).lower() not in ("homepage", "page d'accueil", "sito internet")
     ]
+    phase_ms["homepage_snapshot_lookup"] = round((time.monotonic() - phase_started) * 1000, 1)
+    phase_started = time.monotonic()
     profiles, scanned_homepages, homepage_report = await homepage_profiles(
         scan_communications,
         {str(pick(row, "PersonNumber")): normalize(row)["name"] for row in rows if is_current(row)})
+    phase_ms["homepage_profiles"] = round((time.monotonic() - phase_started) * 1000, 1)
+    phase_started = time.monotonic()
     profiles.update(reusable_homepages)
     homepages = len(current_homepages)
     homepage_report["snapshot_reused_members"] = len(reusable_homepages)
@@ -1601,7 +1611,11 @@ async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|I
                                            and verified_social_url(url)}
             except (KeyError, TypeError, ValueError):
                 continue
+    phase_ms["party_snapshot_lookup"] = round((time.monotonic() - phase_started) * 1000, 1)
+    phase_started = time.monotonic()
     party_links, party_diagnostic = await party_profile_links(rows, fresh_party)
+    phase_ms["party_profile_links"] = round((time.monotonic() - phase_started) * 1000, 1)
+    phase_started = time.monotonic()
     previous_profiles = previous.get("profiles", {})
     retained = 0
     for number in ids:
@@ -1655,6 +1669,8 @@ async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|I
     data = {"homepage_checked_at": homepage_checked_next,
             "homepage_urls": current_homepages,
             "party_checked_at": checked_next, "profiles": profiles, "profiles_by_source": by_source, "updated_at": datetime.now(timezone.utc).isoformat(), "cached": False, "debug": {"party_sources": party_diagnostic, "party_refresh_force": force, "party_refresh_reused": len(fresh_party), "homepage_refresh_force": force, "homepage_refresh_reused": len(reusable_homepages), "homepage_refresh_scanned": scanned_homepages, "homepage_refresh_ttl_hours": ttl_hours, "party_members_added": party_added, "previous_links_retained": retained, "coverage": missing, "platforms": platforms, "homepages_checked": homepages, "homepage_diagnostics": homepage_report, "homepage_profiles": len(profiles), "communication_count": len(communications), "communication_error": diagnostic.get("error")}}
+    phase_ms["merge_and_coverage"] = round((time.monotonic() - phase_started) * 1000, 1)
+    phase_started = time.monotonic()
     cache_after = http_cache_diagnostics()
     rejection_groups = []
     for (host, status), record in _http_cache_rejections.items():
@@ -1686,9 +1702,15 @@ async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|I
         "refresh_write_ms": round(cache_after["write_ms"] - cache_before["write_ms"], 1),
         "refresh_duration_ms": round((time.monotonic() - refresh_started) * 1000),
     }
+    phase_ms["http_cache_diagnostics"] = round((time.monotonic() - phase_started) * 1000, 1)
+    phase_started = time.monotonic()
     snapshot = read_profile_snapshot()
     snapshot[language] = data
+    data["debug"]["phase_timings_ms"] = phase_ms
+    data["debug"]["phase_timings_ms"]["snapshot_read_and_prepare"] = round((time.monotonic() - phase_started) * 1000, 1)
+    save_started = time.monotonic()
     save_profile_snapshot(snapshot)
+    logger.info("Social refresh snapshot save_ms=%.1f phase_timings_ms=%s", (time.monotonic() - save_started) * 1000, phase_ms)
     logger.info("Social refresh complete homepages=%d profiles=%d", homepages, len(profiles))
     return data
 
