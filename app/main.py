@@ -428,8 +428,8 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                         certificate_error = "certificate" in detail or "hostname mismatch" in detail
                         parsed_current = urlparse(current)
                         host = parsed_current.hostname or ""
-                        # Jauslin's independently verified personal site is on a
-                        # different domain. Use it only after a TLS failure.
+                        # Only explicitly verified personal-site hosts are retried
+                        # after TLS failures; never disable certificate checks.
                         verified_alternate = None
                         if original.hostname in ("jauslin.com", "www.jauslin.com") and host == original.hostname:
                             verified_alternate = "www.mjauslin.ch"
