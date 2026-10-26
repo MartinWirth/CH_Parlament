@@ -409,7 +409,7 @@ def homepage_error_category(exc):
     return "invalid_url_or_data"
 
 
-async def scan_homepage(client, url, semaphore, diagnostic=None):
+async def scan_homepage(client, url, semaphore, diagnostic=None, timeout_retry_semaphore=None):
     now = time.time()
     cached = _homepage_cache.get(url)
     if cached and now - cached[0] < _homepage_cache_ttl and diagnostic is None:
@@ -436,7 +436,11 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                         stage = "http_get"
                         if diagnostic is not None:
                             diagnostic.setdefault("tls_attempts", []).append({"url": current, "attempt": attempt + 1})
-                        response = await client.get(current, follow_redirects=False, timeout=12 if attempt else 8)
+                        if attempt and timeout_retry_semaphore is not None:
+                            async with timeout_retry_semaphore:
+                                response = await client.get(current, follow_redirects=False, timeout=12)
+                        else:
+                            response = await client.get(current, follow_redirects=False, timeout=12 if attempt else 8)
                         if diagnostic is not None:
                             diagnostic["tls_attempts"][-1].update({"outcome": "http_response", "http_status": response.status_code})
                         break
@@ -730,11 +734,12 @@ async def homepage_profiles(communications, member_names=None):
         if url:
             homepages.setdefault(str(row.get("PersonNumber")), url)
     semaphore = asyncio.Semaphore(8)
+    timeout_retry_semaphore = asyncio.Semaphore(2)
     # Inspect raw social URLs as well: many personal sites embed their links in
     # script data rather than anchors. Accept extras only with a surname match.
     diagnostics = [{} for _ in homepages]
     async with httpx.AsyncClient(timeout=8, trust_env=False, headers={"User-Agent": "CH-Parlament/1.0"}) as client:
-        results = await asyncio.gather(*(scan_homepage(client, url, semaphore, diagnostics[i]) for i, url in enumerate(homepages.values())))
+        results = await asyncio.gather(*(scan_homepage(client, url, semaphore, diagnostics[i], timeout_retry_semaphore) for i, url in enumerate(homepages.values())))
     # Follow only two relevant, same-host subpages for otherwise empty homepages.
     subpage_results = {}
     async with httpx.AsyncClient(timeout=8, trust_env=False, headers={"User-Agent": "CH-Parlament/1.0"}) as client:
@@ -751,7 +756,7 @@ async def homepage_profiles(communications, member_names=None):
                 diagnostic["subpage_scans"].append(detail)
                 jobs.append((number, suburl, detail))
         if jobs:
-            fetched = await asyncio.gather(*(scan_homepage(client, url, semaphore, detail) for _, url, detail in jobs))
+            fetched = await asyncio.gather(*(scan_homepage(client, url, semaphore, detail, timeout_retry_semaphore) for _, url, detail in jobs))
             for (number, suburl, detail), links in zip(jobs, fetched):
                 subpage_results.setdefault(number, []).append((suburl, links, detail))
     enriched = {}
