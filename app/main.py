@@ -175,6 +175,8 @@ class SocialLinkParser(HTMLParser):
         super().__init__()
         self.links = []
         self.data_links = []
+        self.navigation_links = []
+        self._anchor = None
         self.json_documents = []
         self._json_ld = False
         self._json_chunks = []
@@ -196,6 +198,8 @@ class SocialLinkParser(HTMLParser):
                 if isinstance(value, str) and value.startswith(("https://", "http://", "//")):
                     self.data_links.append(value)
         if tag == "a" and attrs.get("href"):
+            self._anchor = {"href": attrs["href"], "text": attrs.get("title", "") + " " + attrs.get("aria-label", "")}
+            self.navigation_links.append(self._anchor)
             self.link_diagnostics["anchors_total"] += 1
             self.links.append(attrs["href"])
         elif tag == "link" and "me" in attrs.get("rel", "").lower().split() and attrs.get("href"):
@@ -210,10 +214,14 @@ class SocialLinkParser(HTMLParser):
             self._json_chunks = []
 
     def handle_data(self, data):
+        if self._anchor is not None:
+            self._anchor["text"] += " " + data
         if self._json_ld:
             self._json_chunks.append(data)
 
     def handle_endtag(self, tag):
+        if tag == "a":
+            self._anchor = None
         if self._excluded_tags:
             if tag == self._excluded_tags[-1]:
                 self._excluded_tags.pop()
@@ -561,26 +569,41 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                     diagnostic["parser"] = dict(parser.link_diagnostics)
                     diagnostic["parser"]["candidate_urls"] = len(parser.links) + len(list(parser.social_references()))
                 if diagnostic is not None:
-                    internal = []
-                    for href in parser.links:
+                    keywords = ("kontakt", "contact", "contatto", "about", "about-me",
+                                "ueber-mich", "uber-mich", "über-mich", "social-media",
+                                "socialmedia", "links", "person", "profil", "profile",
+                                "biografie", "biography", "politique", "politik",
+                                "à propos", "a propos", "chi sono", "über mich")
+                    ranked = []
+                    rejected = 0
+                    for entry in parser.navigation_links:
                         try:
-                            target = urljoin(current, href)
+                            target = urljoin(current, entry["href"])
                             parsed_target = urlparse(target)
                             path = parsed_target.path.lower().rstrip("/")
-                            if (parsed_target.scheme == "https"
-                                and parsed_target.hostname == urlparse(current).hostname
-                                and parsed_target.port in (None, 443)
-                                and not parsed_target.username and not parsed_target.password
-                                and not parsed_target.query and not parsed_target.fragment
-                                and target != current
-                                and any(path.endswith("/" + word) for word in
-                                    ("kontakt", "contact", "contatto", "about", "about-me",
-                                     "ueber-mich", "uber-mich", "social-media", "socialmedia", "links"))
-                                and target not in internal):
-                                internal.append(target)
+                            label = entry["text"].strip().lower()
+                            if (parsed_target.scheme != "https" or
+                                parsed_target.hostname != urlparse(current).hostname or
+                                parsed_target.port not in (None, 443) or
+                                parsed_target.username or parsed_target.password or
+                                parsed_target.query or parsed_target.fragment or
+                                target == current):
+                                rejected += 1
+                                continue
+                            path_match = any(path.endswith("/" + word.replace(" ", "-")) for word in keywords)
+                            label_match = any(word in label for word in keywords)
+                            if not (path_match or label_match):
+                                rejected += 1
+                                continue
+                            score = (2 if path_match else 0) + (1 if label_match else 0)
+                            if not any(item[1] == target for item in ranked):
+                                ranked.append((score, target))
                         except (ValueError, UnicodeError):
-                            continue
-                    diagnostic["internal_page_candidates"] = internal[:2]
+                            rejected += 1
+                    ranked.sort(key=lambda item: -item[0])
+                    diagnostic["internal_page_candidates"] = [url for _, url in ranked[:2]]
+                    diagnostic["subpage_candidate_count"] = len(ranked)
+                    diagnostic["subpage_rejected_link_count"] = rejected
                 candidate_sources = [(item, "anchor_or_metadata") for item in parser.links]
                 candidate_sources += [(item, "json_ld_person_sameAs") for item in parser.social_references()]
                 candidate_sources += [(item, "raw_html_or_script") for item in raw_social]
@@ -770,6 +793,8 @@ async def homepage_profiles(communications, member_names=None):
             "data_attribute_count": len(diagnostic.get("data_social_urls", [])),
             "subpage_scan_status": diagnostic.get("subpage_scan_status"),
             "internal_page_candidates": diagnostic.get("internal_page_candidates", []),
+            "subpage_candidate_count": diagnostic.get("subpage_candidate_count", 0),
+            "subpage_rejected_link_count": diagnostic.get("subpage_rejected_link_count", 0),
             "subpage_scans": diagnostic.get("subpage_scans", []),
         })
     homepage_report = {
