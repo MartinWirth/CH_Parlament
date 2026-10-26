@@ -244,3 +244,35 @@ def test_classify_unverified_social_candidates():
         "https://www.youtube.com/live/abc123")[0] == "content"
     assert classify_unverified_social_candidate(
         "https://www.instagram.com/unknown_private_handle/")[0] == "requires_identity_verification"
+
+
+def test_http_response_cache_reuses_successful_html(monkeypatch):
+    import httpx
+    import app.main as module
+
+    module._http_response_cache.clear()
+    response = httpx.Response(
+        200, headers={"content-type": "text/html; charset=utf-8"},
+        content=b"<html>cached response</html>",
+        request=httpx.Request("GET", "https://example.org/"))
+    module.store_http_response("https://example.org/", response)
+    cached = module.cached_http_response("https://example.org/")
+    assert cached is not None
+    assert cached.status_code == 200
+    assert cached.content == response.content
+    assert module.cached_http_response("https://different.example.org/") is None
+    module._http_response_cache.clear()
+
+
+def test_http_response_cache_rejects_errors_and_non_html():
+    import httpx
+    import app.main as module
+
+    module._http_response_cache.clear()
+    url = "https://example.org/"
+    for status, content_type in ((404, "text/html"), (200, "application/json")):
+        response = httpx.Response(
+            status, headers={"content-type": content_type},
+            content=b"ignored", request=httpx.Request("GET", url))
+        module.store_http_response(url, response)
+    assert module.cached_http_response(url) is None
