@@ -564,7 +564,9 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                 candidate_sources += [(item, "json_ld_person_sameAs") for item in parser.social_references()]
                 candidate_sources += [(item, "raw_html_or_script") for item in raw_social]
                 candidate_sources += [(item, "cms_data_attribute") for item in parser.data_links]
-                candidate_links = [item for item, _ in candidate_sources]
+                # Data attributes are diagnostic-only here; their acceptance
+                # still requires a personal handle match in homepage_profiles.
+                candidate_links = [item for item, source in candidate_sources if source != "cms_data_attribute"]
                 if diagnostic is not None:
                     diagnostic["candidate_sources"] = []
                     for href, source in candidate_sources:
