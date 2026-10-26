@@ -8,13 +8,14 @@ import ipaddress
 import socket
 import re
 import json
+import secrets
 import unicodedata
 from html.parser import HTMLParser
 from urllib.parse import urljoin, parse_qs
 import xml.etree.ElementTree as ET
 from urllib.parse import urlparse, urlunparse
 import httpx
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -1541,8 +1542,20 @@ async def social_profiles_cached(language: str = Query("DE", pattern="^(DE|FR|IT
     snapshot = read_profile_snapshot().get(language, {})
     return {"profiles": snapshot.get("profiles", {}), "profiles_by_source": snapshot.get("profiles_by_source", {}), "updated_at": snapshot.get("updated_at"), "cached": True, "debug": snapshot.get("debug", {})}
 
+_refresh_lock = asyncio.Lock()
+
 @app.post("/api/social-profiles/refresh")
-async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|IT|RM)$"), force: bool = Query(False)):
+async def social_profiles_refresh(request: Request, language: str = Query("DE", pattern="^(DE|FR|IT|RM)$"), force: bool = Query(False)):
+    configured_token = os.getenv("SOCIAL_REFRESH_TOKEN")
+    if configured_token and not secrets.compare_digest(request.headers.get("X-Refresh-Token", ""), configured_token):
+        raise HTTPException(status_code=403, detail="Refresh authorization required")
+    if _refresh_lock.locked():
+        raise HTTPException(status_code=409, detail="Refresh already running")
+    async with _refresh_lock:
+        return await _run_social_profiles_refresh(language, force)
+
+
+async def _run_social_profiles_refresh(language, force):
     """Refresh profiles independently of the immediate cached response."""
     cache_before = http_cache_diagnostics()
     rejection_before = {key: value["count"] for key, value in _http_cache_rejections.items()}
