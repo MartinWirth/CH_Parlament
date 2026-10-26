@@ -375,6 +375,24 @@ def bounded_homepage_html(content, diagnostic=None):
     return content
 
 
+def homepage_error_category(exc):
+    """Classify transport failures for diagnostics only."""
+    if isinstance(exc, httpx.TimeoutException):
+        return "timeout"
+    if isinstance(exc, httpx.HTTPStatusError):
+        return "http_status"
+    if isinstance(exc, httpx.ConnectError):
+        message = str(exc).lower()
+        if any(word in message for word in ("certificate", "ssl", "tls", "hostname mismatch")):
+            return "tls_certificate"
+        if any(word in message for word in ("getaddrinfo", "name resolution", "name or service not known", "nodename nor servname")):
+            return "dns_resolution"
+        return "tcp_connection"
+    if isinstance(exc, httpx.HTTPError):
+        return "http_transport"
+    return "invalid_url_or_data"
+
+
 async def scan_homepage(client, url, semaphore, diagnostic=None):
     now = time.time()
     cached = _homepage_cache.get(url)
@@ -532,6 +550,7 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
         except (httpx.HTTPError, ValueError, UnicodeError) as exc:
             if diagnostic is not None:
                 diagnostic["status"] = type(exc).__name__
+                diagnostic["error_category"] = homepage_error_category(exc)
                 diagnostic["error_detail"] = str(exc)[:240]
                 diagnostic["error_stage_url"] = current if "current" in locals() else url
                 diagnostic["error_stage"] = stage if "stage" in locals() else "initial_url"
