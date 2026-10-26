@@ -345,6 +345,7 @@ def approved_homepage_redirect(source_host, target_host):
         verified_pairs = {
             "andrisilberschmidt.ch": "silberschmidt2027.ch",
             "marc-jost.ch": "marcjost.ch",
+            "jauslin.com": "mjauslin.ch",
             "susanne-vincenz-stauffacher.ch": "vincenz-stauffacher.ch",
         }
         pairs = json.loads(os.getenv("APPROVED_HOMEPAGE_REDIRECTS", "{}"))
@@ -427,6 +428,26 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                         certificate_error = "certificate" in detail or "hostname mismatch" in detail
                         parsed_current = urlparse(current)
                         host = parsed_current.hostname or ""
+                        # Jauslin's independently verified personal site is on a
+                        # different domain. Use it only after a TLS failure.
+                        verified_alternate = (
+                            "www.mjauslin.ch"
+                            if original.hostname in ("jauslin.com", "www.jauslin.com")
+                            and host in ("jauslin.com", "www.jauslin.com")
+                            else None
+                        )
+                        if verified_alternate and attempt == 0:
+                            alternate = canonical_homepage_url(
+                                urlunparse(parsed_current._replace(netloc=verified_alternate))
+                            )
+                            if await asyncio.to_thread(public_hostname, verified_alternate):
+                                alternate_tried.add(alternate)
+                                if diagnostic is not None:
+                                    diagnostic.setdefault("tls_fallbacks", []).append(
+                                        {"from": current, "to": alternate, "reason": "verified_personal_site"}
+                                    )
+                                current = alternate
+                                continue
                         alternate_host = host[4:] if host.startswith("www.") else "www." + host
                         if not certificate_error or attempt > 0 or not same_site_www_redirect(host, alternate_host):
                             raise
