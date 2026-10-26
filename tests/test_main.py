@@ -138,3 +138,16 @@ def test_bounded_homepage_html():
     diagnostic = {}
     assert bounded_homepage_html(b"c" * 3_000_001, diagnostic) is None
     assert diagnostic["status"] == "html_too_large"
+
+
+def test_homepage_error_categories():
+    import httpx
+    from app.main import homepage_error_category
+
+    assert homepage_error_category(httpx.ConnectError("certificate verify failed")) == "tls_certificate"
+    assert homepage_error_category(httpx.ConnectError("getaddrinfo failed")) == "dns_resolution"
+    assert homepage_error_category(httpx.ConnectError("connection refused")) == "tcp_connection"
+    assert homepage_error_category(httpx.ReadTimeout("read timed out")) == "timeout"
+    assert homepage_error_category(httpx.ConnectTimeout("connect timed out")) == "timeout"
+    assert homepage_error_category(httpx.ReadError("connection reset")) == "http_transport"
+    assert homepage_error_category(ValueError("invalid url")) == "invalid_url_or_data"
