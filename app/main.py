@@ -1803,6 +1803,20 @@ async def missing_homepage_diagnostic(
                 "fetch_status": status,
                 "error_categories": categories,
                 "retry_errors": detail.get("retry_errors", []),
+                "http_status": detail.get("http_status"),
+                "final_url": detail.get("final_url"),
+                "redirects": detail.get("redirects", []),
+                "tls_attempts": [
+                    {
+                        "url": attempt.get("url"),
+                        "attempt": attempt.get("attempt"),
+                        "outcome": attempt.get("outcome"),
+                        "http_status": attempt.get("http_status"),
+                        "error_category": attempt.get("error_category"),
+                        "error_detail": attempt.get("error_detail"),
+                    }
+                    for attempt in attempts
+                ],
                 "tls_fallback_decision": detail.get("tls_fallback_decision"),
                 "tls_fallbacks": detail.get("tls_fallbacks", []),
                 "recommended_action": (
