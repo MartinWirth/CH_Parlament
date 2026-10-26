@@ -85,7 +85,7 @@ async function refreshSocialProfiles(requested,version,applyProfiles){
   debug("Social-Media-Aktualisierung gestartet",{language:requested});
   const started=performance.now();
   try{
-    const response=await fetch("/api/social-profiles/refresh?language="+encodeURIComponent(requested.toUpperCase()));
+    const response=await fetch("/api/social-profiles/refresh?language="+encodeURIComponent(requested.toUpperCase()),{method:"POST"});
     if(!response.ok)throw Error("HTTP "+response.status);
     const result=await response.json();
     applyProfiles(result,"aktualisiert");
