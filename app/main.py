@@ -1786,6 +1786,37 @@ async def missing_homepage_diagnostic(
         }
         for item in cases:
             item["scan"] = detail_by_number.get(item["person_number"]) if item["person_number"] in numbers else None
+        technical_statuses = {"hostname_not_public", "fetch_error", "http_error_or_not_html"}
+        technical_cases = []
+        for item in cases:
+            detail = item.get("scan") or {}
+            status = detail.get("fetch_status", "")
+            if status not in technical_statuses and not detail.get("retry_errors"):
+                continue
+            attempts = detail.get("tls_attempts", [])
+            categories = sorted({entry.get("error_category") for entry in attempts
+                                 if entry.get("error_category")})
+            technical_cases.append({
+                "person_number": item["person_number"],
+                "name": item["name"],
+                "homepage": item["homepage"],
+                "fetch_status": status,
+                "error_categories": categories,
+                "retry_errors": detail.get("retry_errors", []),
+                "tls_fallback_decision": detail.get("tls_fallback_decision"),
+                "tls_fallbacks": detail.get("tls_fallbacks", []),
+                "recommended_action": (
+                    "Check official replacement URL and public DNS; do not bypass SSRF checks"
+                    if status == "hostname_not_public" or "dns_resolution" in categories else
+                    "Check certificate hostname and official HTTPS address; keep TLS verification enabled"
+                    if "tls_certificate" in categories else
+                    "Inspect HTTP status, content type and redirect destination"
+                    if status == "http_error_or_not_html" else
+                    "Check site availability and TCP connectivity; retry later"
+                ),
+            })
+        result["technical_cases"] = technical_cases
+        result["technical_case_count"] = len(technical_cases)
         result["scanned_count"] = len(numbers)
         result["scan_report"] = {
             "reasons": report.get("reasons", {}),
