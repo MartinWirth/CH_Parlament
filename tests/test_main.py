@@ -151,3 +151,11 @@ def test_homepage_error_categories():
     assert homepage_error_category(httpx.ConnectTimeout("connect timed out")) == "timeout"
     assert homepage_error_category(httpx.ReadError("connection reset")) == "http_transport"
     assert homepage_error_category(ValueError("invalid url")) == "invalid_url_or_data"
+
+
+def test_jauslin_verified_redirect_only():
+    from app.main import approved_homepage_redirect
+    assert approved_homepage_redirect("www.jauslin.com", "www.mjauslin.ch")
+    assert approved_homepage_redirect("jauslin.com", "mjauslin.ch")
+    assert not approved_homepage_redirect("jauslin.com", "unverified.example")
+    assert not approved_homepage_redirect("fake.jauslin.com", "mjauslin.ch")
