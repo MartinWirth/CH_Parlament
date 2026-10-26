@@ -347,3 +347,33 @@ def test_http_cache_flush_is_batched(monkeypatch):
         assert len(writes) == 1
 
     asyncio.run(run())
+
+
+def test_http_cache_rejection_reason_counters():
+    import httpx
+    import app.main as module
+
+    cases = [
+        (403, {"content-type": "text/html"}, b"blocked", "reject_http_status"),
+        (200, {"content-type": "application/json"}, b"{}", "reject_content_type"),
+        (200, {"content-type": "text/html", "cache-control": "no-store"}, b"ok", "reject_no_store"),
+        (200, {"content-type": "text/html", "cache-control": "private"}, b"ok", "reject_private"),
+        (200, {"content-type": "text/html", "set-cookie": "session=1"}, b"ok", "reject_set_cookie"),
+    ]
+    for index, (status, headers, content, key) in enumerate(cases):
+        before = module.http_cache_diagnostics()[key]
+        url = f"https://example.org/rejected-{index}"
+        response = httpx.Response(status, headers=headers, content=content,
+                                  request=httpx.Request("GET", url))
+        module.store_http_response(url, response)
+        assert module.http_cache_diagnostics()[key] == before + 1
+        assert url not in module._http_response_cache
+
+    url = "https://example.org/oversized"
+    before = module.http_cache_diagnostics()["reject_oversize"]
+    response = httpx.Response(200, headers={"content-type": "text/html"},
+                              content=b"x" * (module._http_response_cache_max_bytes + 1),
+                              request=httpx.Request("GET", url))
+    module.store_http_response(url, response)
+    assert module.http_cache_diagnostics()["reject_oversize"] == before + 1
+    assert url not in module._http_response_cache
