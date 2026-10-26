@@ -1541,7 +1541,7 @@ async def social_profiles_cached(language: str = Query("DE", pattern="^(DE|FR|IT
     snapshot = read_profile_snapshot().get(language, {})
     return {"profiles": snapshot.get("profiles", {}), "profiles_by_source": snapshot.get("profiles_by_source", {}), "updated_at": snapshot.get("updated_at"), "cached": True, "debug": snapshot.get("debug", {})}
 
-@app.get("/api/social-profiles/refresh")
+@app.post("/api/social-profiles/refresh")
 async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|IT|RM)$"), force: bool = Query(False)):
     """Refresh profiles independently of the immediate cached response."""
     cache_before = http_cache_diagnostics()
