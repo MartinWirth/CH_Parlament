@@ -560,8 +560,21 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                     diagnostic["html_bytes"] = len(content)
                     diagnostic["parser"] = dict(parser.link_diagnostics)
                     diagnostic["parser"]["candidate_urls"] = len(parser.links) + len(list(parser.social_references()))
-                candidate_links = list(parser.links) + list(parser.social_references())
-                candidate_links += raw_social
+                candidate_sources = [(item, "anchor_or_metadata") for item in parser.links]
+                candidate_sources += [(item, "json_ld_person_sameAs") for item in parser.social_references()]
+                candidate_sources += [(item, "raw_html_or_script") for item in raw_social]
+                candidate_sources += [(item, "cms_data_attribute") for item in parser.data_links]
+                candidate_links = [item for item, _ in candidate_sources]
+                if diagnostic is not None:
+                    diagnostic["candidate_sources"] = []
+                    for href, source in candidate_sources:
+                        try:
+                            target = urljoin(current, href)
+                            platform = verified_social_url(target)
+                        except (ValueError, UnicodeError):
+                            continue
+                        if platform and len(diagnostic["candidate_sources"]) < 60 and not any(x["url"] == target and x["source"] == source for x in diagnostic["candidate_sources"]):
+                            diagnostic["candidate_sources"].append({"url": target, "source": source, "platform": platform})
                 if diagnostic is not None:
                     diagnostic["social_url_candidates"] = []
                 for href in candidate_links:
@@ -697,6 +710,13 @@ async def homepage_profiles(communications, member_names=None):
             "redirect_chain": diagnostic.get("redirects", []),
             "candidate_count": len(candidates),
             "candidate_samples": candidates[:5],
+            "candidate_diagnostics": [
+                {**item, "personal_handle_match": personal_handle_matches(item["url"], (member_names or {}).get(number, "")),
+                 "rejection_reason": "no_matching_personal_handle" if not personal_handle_matches(item["url"], (member_names or {}).get(number, "")) else "not_selected_or_duplicate"}
+                for item in diagnostic.get("candidate_sources", [])[:40]
+            ],
+            "parser_diagnostics": diagnostic.get("parser", {}),
+            "data_attribute_count": len(diagnostic.get("data_social_urls", [])),
         })
     homepage_report = {
         "checked": len(homepages),
