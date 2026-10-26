@@ -1366,7 +1366,7 @@ def party_personal_handle_matches(url, person_name):
     return len(surname) >= 4 and surname in handle
 
 
-async def party_profile_links(member_rows):
+async def party_profile_links(member_rows, fresh_profiles=None):
     sources, diagnostic = configured_party_profiles(member_rows)
     discovered, discovery_diagnostic = await discover_sp_party_profiles(member_rows)
     other_discovered, other_diagnostics = await discover_other_party_profiles(member_rows)
@@ -1387,9 +1387,15 @@ async def party_profile_links(member_rows):
     diagnostic["additional_official_pages"] = {"matched": len(extra_matched), "members": list(extra_matched.values())}
     for number, url in discovered.items():
         sources.setdefault(number, url)
+    fresh_profiles = fresh_profiles or {}
+    reused = {number: links for number, links in fresh_profiles.items()
+              if number in sources and isinstance(links, dict)}
+    sources = {number: url for number, url in sources.items() if number not in reused}
+    diagnostic["snapshot_reused_members"] = len(reused)
+    diagnostic["snapshot_scanned_members"] = len(sources)
     if not sources:
         diagnostic["pages"] = []
-        return {}, diagnostic
+        return dict(reused), diagnostic
     # Diagnose repeated FDP profile URLs without logging query parameters or personal data.
     from collections import Counter
     fdp_urls = [url for url in sources.values()
@@ -1464,6 +1470,7 @@ async def party_profile_links(member_rows):
     diagnostic["outcome_counts"] = {status: sum(page["outcome"] == status for page in pages) for status in ("personal_links_found", "only_unverified_or_party_links", "no_social_links_in_html", "fetch_or_parse_failed")}
     diagnostic["matched_personal_handles"] = len(verified)
     diagnostic["pages"] = pages
+    verified.update(reused)
     return verified, diagnostic
 
 
@@ -1521,7 +1528,7 @@ async def social_profiles_cached(language: str = Query("DE", pattern="^(DE|FR|IT
     return {"profiles": snapshot.get("profiles", {}), "profiles_by_source": snapshot.get("profiles_by_source", {}), "updated_at": snapshot.get("updated_at"), "cached": True, "debug": snapshot.get("debug", {})}
 
 @app.get("/api/social-profiles/refresh")
-async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|IT|RM)$")):
+async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|IT|RM)$"), force: bool = Query(False)):
     """Refresh profiles independently of the immediate cached response."""
     cache_before = http_cache_diagnostics()
     rejection_before = {key: value["count"] for key, value in _http_cache_rejections.items()}
@@ -1533,8 +1540,26 @@ async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|I
     profiles, homepages, homepage_report = await homepage_profiles(communications, {str(pick(row, "PersonNumber")): normalize(row)["name"] for row in rows if is_current(row)})
     personal_profiles = {number: dict(links) for number, links in profiles.items()}
     parliament_profiles = communication_profiles(communications)
-    party_links, party_diagnostic = await party_profile_links(rows)
     previous = read_profile_snapshot().get(language, {})
+    from datetime import timedelta
+    checked = previous.get("party_checked_at", {})
+    old_party = previous.get("profiles_by_source", {})
+    now = datetime.now(timezone.utc)
+    fresh_party = {}
+    if not force:
+        for number in ids:
+            try:
+                timestamp = datetime.fromisoformat(checked[number])
+                if timestamp.tzinfo is None or now - timestamp.astimezone(timezone.utc) > timedelta(hours=24):
+                    continue
+                links = old_party.get(number, {}).get("Partei-Homepage", {})
+                if isinstance(links, dict):
+                    fresh_party[number] = {platform: url for platform, url in links.items()
+                                           if platform in _social_domains and isinstance(url, str)
+                                           and verified_social_url(url)}
+            except (KeyError, TypeError, ValueError):
+                continue
+    party_links, party_diagnostic = await party_profile_links(rows, fresh_party)
     previous_profiles = previous.get("profiles", {})
     retained = 0
     for number in ids:
@@ -1578,7 +1603,9 @@ async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|I
         "members_without_social_profiles": len(ids - set(profiles)),
     }
     platforms = {platform: sum(platform in links for links in profiles.values()) for platform in _social_domains}
-    data = {"profiles": profiles, "profiles_by_source": by_source, "updated_at": datetime.now(timezone.utc).isoformat(), "cached": False, "debug": {"party_sources": party_diagnostic, "party_members_added": party_added, "previous_links_retained": retained, "coverage": missing, "platforms": platforms, "homepages_checked": homepages, "homepage_diagnostics": homepage_report, "homepage_profiles": len(profiles), "communication_count": len(communications), "communication_error": diagnostic.get("error")}}
+    checked_next = {number: checked[number] for number in fresh_party}
+    checked_next.update({number: now.isoformat() for number in ids if number not in fresh_party})
+    data = {"party_checked_at": checked_next, "profiles": profiles, "profiles_by_source": by_source, "updated_at": datetime.now(timezone.utc).isoformat(), "cached": False, "debug": {"party_sources": party_diagnostic, "party_refresh_force": force, "party_refresh_reused": len(fresh_party), "party_members_added": party_added, "previous_links_retained": retained, "coverage": missing, "platforms": platforms, "homepages_checked": homepages, "homepage_diagnostics": homepage_report, "homepage_profiles": len(profiles), "communication_count": len(communications), "communication_error": diagnostic.get("error")}}
     cache_after = http_cache_diagnostics()
     rejection_groups = []
     for (host, status), record in _http_cache_rejections.items():
