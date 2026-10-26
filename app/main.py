@@ -436,7 +436,7 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                         stage = "http_get"
                         if diagnostic is not None:
                             diagnostic.setdefault("tls_attempts", []).append({"url": current, "attempt": attempt + 1})
-                        response = await client.get(current, follow_redirects=False)
+                        response = await client.get(current, follow_redirects=False, timeout=12 if attempt else 8)
                         if diagnostic is not None:
                             diagnostic["tls_attempts"][-1].update({"outcome": "http_response", "http_status": response.status_code})
                         break
@@ -491,6 +491,14 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                     except httpx.TimeoutException as exc:
                         if diagnostic is not None:
                             diagnostic.setdefault("retry_errors", []).append(type(exc).__name__)
+                            diagnostic.setdefault("timeout_retries", []).append(
+                                {"url": current, "attempt": attempt + 1,
+                                 "error": type(exc).__name__,
+                                 "action": "retry_same_verified_url" if attempt == 0 else "stop"})
+                        # One bounded retry, with a slightly longer timeout.
+                        # No certificate verification or hostname checks are bypassed.
+                        if attempt == 0:
+                            continue
                         raise
                 if response is None:
                     if diagnostic is not None:
@@ -798,6 +806,7 @@ async def homepage_profiles(communications, member_names=None):
             "reason": reason,
             "fetch_status": status,
             "retry_errors": diagnostic.get("retry_errors", []),
+            "timeout_retries": diagnostic.get("timeout_retries", []),
             "tls_attempts": diagnostic.get("tls_attempts", []),
             "tls_fallbacks": diagnostic.get("tls_fallbacks", []),
             "tls_fallback_decision": diagnostic.get("tls_fallback_decision"),
