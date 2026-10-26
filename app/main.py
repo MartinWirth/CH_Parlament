@@ -267,7 +267,7 @@ _http_response_cache_max_bytes = 2_000_000
 _http_response_cache_path = Path(os.getenv("HTTP_RESPONSE_CACHE_PATH", str(ROOT.parent / ".http_response_cache.json")))
 _http_response_inflight = {}
 _http_response_cache_lock = None
-_http_cache_stats = {"hits": 0, "misses": 0, "coalesced": 0, "writes": 0, "write_ms": 0.0, "miss_new": 0, "miss_expired": 0, "miss_evicted": 0, "miss_uncacheable": 0, "miss_fetch_error": 0, "miss_response_rejected": 0}
+_http_cache_stats = {"hits": 0, "misses": 0, "coalesced": 0, "writes": 0, "write_ms": 0.0, "miss_new": 0, "miss_expired": 0, "miss_evicted": 0, "miss_uncacheable": 0, "miss_fetch_error": 0, "miss_response_rejected": 0, "reject_http_status": 0, "reject_content_type": 0, "reject_no_store": 0, "reject_private": 0, "reject_set_cookie": 0, "reject_oversize": 0}
 _http_cache_flush_task = None
 _http_cache_seen_urls = set()
 _http_cache_evicted_urls = set()
@@ -313,12 +313,24 @@ def cached_http_response(url):
 
 
 def store_http_response(url, response):
-    if (response.status_code != 200 or
-        len(response.content) > _http_response_cache_max_bytes or
-        "text/html" not in response.headers.get("content-type", "").lower() or
-        "no-store" in response.headers.get("cache-control", "").lower() or
-        "private" in response.headers.get("cache-control", "").lower() or
-        "set-cookie" in response.headers):
+    """Cache only safe public HTML; record all rejection reasons."""
+    reasons = []
+    if response.status_code != 200:
+        reasons.append("reject_http_status")
+    if len(response.content) > _http_response_cache_max_bytes:
+        reasons.append("reject_oversize")
+    if "text/html" not in response.headers.get("content-type", "").lower():
+        reasons.append("reject_content_type")
+    cache_control = response.headers.get("cache-control", "").lower()
+    if "no-store" in cache_control:
+        reasons.append("reject_no_store")
+    if "private" in cache_control:
+        reasons.append("reject_private")
+    if "set-cookie" in response.headers:
+        reasons.append("reject_set_cookie")
+    for reason in reasons:
+        _http_cache_stats[reason] += 1
+    if reasons:
         return
     if len(_http_response_cache) >= _http_response_cache_max_entries and url not in _http_response_cache:
         oldest = min(_http_response_cache, key=lambda key: _http_response_cache[key][0])
@@ -1537,7 +1549,9 @@ async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|I
         "refresh_misses": cache_after["misses"] - cache_before["misses"],
         **{f"refresh_{key}": cache_after[key] - cache_before[key]
            for key in ("miss_new", "miss_expired", "miss_evicted", "miss_uncacheable",
-                       "miss_fetch_error", "miss_response_rejected")},
+                       "miss_fetch_error", "miss_response_rejected", "reject_http_status",
+                       "reject_content_type", "reject_no_store", "reject_private",
+                       "reject_set_cookie", "reject_oversize")},
         "refresh_coalesced": cache_after["coalesced"] - cache_before["coalesced"],
         "refresh_writes": cache_after["writes"] - cache_before["writes"],
         "refresh_write_ms": round(cache_after["write_ms"] - cache_before["write_ms"], 1),
