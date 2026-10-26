@@ -276,3 +276,50 @@ def test_http_response_cache_rejects_errors_and_non_html():
             content=b"ignored", request=httpx.Request("GET", url))
         module.store_http_response(url, response)
     assert module.cached_http_response(url) is None
+
+
+def test_http_response_cache_persistence(tmp_path, monkeypatch):
+    import httpx
+    import app.main as module
+    monkeypatch.setattr(module, "_http_response_cache_path", tmp_path / "http-cache.json")
+    module._http_response_cache.clear()
+    url = "https://example.org/public"
+    response = httpx.Response(200, headers={"content-type": "text/html"},
+                              content=b"<html>persistent</html>",
+                              request=httpx.Request("GET", url))
+    module.store_http_response(url, response)
+    module.save_http_response_cache()
+    module._http_response_cache.clear()
+    module.load_http_response_cache()
+    assert module.cached_http_response(url).content == b"<html>persistent</html>"
+    module._http_response_cache.clear()
+
+
+def test_cached_html_get_coalesces_concurrent_requests():
+    import asyncio
+    import httpx
+    import app.main as module
+
+    async def run():
+        module._http_response_cache.clear()
+        module._http_response_inflight.clear()
+        calls = 0
+
+        async def handler(request):
+            nonlocal calls
+            calls += 1
+            await asyncio.sleep(0.02)
+            return httpx.Response(200, headers={"content-type": "text/html"},
+                                  content=b"<html>ok</html>")
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            results = await asyncio.gather(*(
+                module.cached_html_get(client, "https://example.org/singleflight")
+                for _ in range(8)))
+            assert calls == 1
+            assert all(response.status_code == 200 for response, _ in results)
+            _, hit = await module.cached_html_get(client, "https://example.org/singleflight")
+            assert hit is True
+        module._http_response_cache.clear()
+
+    asyncio.run(run())
