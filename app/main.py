@@ -750,6 +750,32 @@ async def homepage_profiles(communications, member_names=None):
                     subdiag.setdefault("accepted_personal_links", {})[platform] = candidate
         if combined:
             enriched[number] = combined
+    # Unmatched handles are review candidates, never automatically attributed.
+    # Provenance and rejection reason allow manual identity verification.
+    for (number, homepage), diagnostic in zip(homepages.items(), diagnostics):
+        if number in enriched:
+            continue
+        review = []
+        seen = set()
+        sources = [(homepage, diagnostic)]
+        sources.extend((url, detail) for url, _, detail in subpage_results.get(number, []))
+        for source_url, detail in sources:
+            for item in detail.get("candidate_sources", []):
+                candidate = item.get("url", "")
+                if candidate in seen:
+                    continue
+                seen.add(candidate)
+                try:
+                    platform = verified_social_url(candidate)
+                except (ValueError, UnicodeError):
+                    continue
+                if platform and not personal_handle_matches(candidate, (member_names or {}).get(number, "")):
+                    review.append({"url": candidate, "platform": platform,
+                                   "source_page": source_url,
+                                   "extraction_source": item.get("source"),
+                                   "status": "requires_identity_verification",
+                                   "auto_accept": False})
+        diagnostic["unverified_personal_candidates"] = review[:30]
     from collections import Counter
     statuses = Counter()
     missing_details = []
@@ -783,6 +809,7 @@ async def homepage_profiles(communications, member_names=None):
             "redirect_target_host": diagnostic.get("redirect_target_host"),
             "redirect_chain": diagnostic.get("redirects", []),
             "candidate_count": len(candidates),
+            "unverified_personal_candidates": diagnostic.get("unverified_personal_candidates", []),
             "candidate_samples": candidates[:5],
             "candidate_diagnostics": [
                 {**item, "personal_handle_match": personal_handle_matches(item["url"], (member_names or {}).get(number, "")),
