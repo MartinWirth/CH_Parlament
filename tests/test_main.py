@@ -377,3 +377,44 @@ def test_http_cache_rejection_reason_counters():
     module.store_http_response(url, response)
     assert module.http_cache_diagnostics()["reject_oversize"] == before + 1
     assert url not in module._http_response_cache
+
+
+def test_http_404_negative_cache(monkeypatch):
+    import asyncio
+    import httpx
+    import app.main as module
+
+    async def run():
+        module._http_not_found_cache.clear()
+        calls = 0
+
+        async def handler(request):
+            nonlocal calls
+            calls += 1
+            return httpx.Response(404, request=request)
+
+        url = "https://example.org/missing-negative-cache-test"
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            first, first_hit = await module.cached_html_get(client, url)
+            second, second_hit = await module.cached_html_get(client, url)
+        assert first.status_code == second.status_code == 404
+        assert first_hit is False
+        assert second_hit is True
+        assert calls == 1
+        module._http_not_found_cache.clear()
+
+    asyncio.run(run())
+
+
+def test_http_rejection_grouped_by_domain_and_status():
+    import httpx
+    import app.main as module
+
+    url = "https://example.org/rejection-group-test"
+    response = httpx.Response(403, headers={"content-type": "text/html"},
+                              request=httpx.Request("GET", url))
+    before = module._http_cache_rejections.get(("example.org", 403), {}).get("count", 0)
+    module.store_http_response(url, response)
+    record = module._http_cache_rejections[("example.org", 403)]
+    assert record["count"] == before + 1
+    assert record["reasons"]["reject_http_status"] >= 1
