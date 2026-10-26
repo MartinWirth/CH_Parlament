@@ -323,3 +323,27 @@ def test_cached_html_get_coalesces_concurrent_requests():
         module._http_response_cache.clear()
 
     asyncio.run(run())
+
+
+def test_http_cache_diagnostics_counters():
+    import app.main as module
+    diagnostics = module.http_cache_diagnostics()
+    assert {"hits", "misses", "coalesced", "writes", "write_ms", "entries", "inflight"} <= diagnostics.keys()
+
+
+def test_http_cache_flush_is_batched(monkeypatch):
+    import asyncio
+    import app.main as module
+
+    async def run():
+        writes = []
+        monkeypatch.setattr(module, "save_http_response_cache", lambda: writes.append(1))
+        module._http_cache_flush_task = None
+        module.schedule_http_cache_flush()
+        first = module._http_cache_flush_task
+        module.schedule_http_cache_flush()
+        assert module._http_cache_flush_task is first
+        await first
+        assert len(writes) == 1
+
+    asyncio.run(run())
