@@ -642,6 +642,7 @@ async def homepage_profiles(communications, member_names=None):
             "fetch_status": status,
             "retry_errors": diagnostic.get("retry_errors", []),
             "error_detail": diagnostic.get("error_detail"),
+        "error_category": diagnostic.get("error_category"),
             "ssl_hint": diagnostic.get("ssl_hint"),
             "error_stage_url": diagnostic.get("error_stage_url"),
             "redirect_reason": diagnostic.get("redirect_reason"),
