@@ -1367,6 +1367,20 @@ def party_personal_handle_matches(url, person_name):
 
 
 async def party_profile_links(member_rows, fresh_profiles=None):
+    # A complete, valid per-member snapshot needs no roster discovery or HTTP.
+    # Include empty dictionaries: they represent checked members with no verified links.
+    active_ids = {str(pick(row, "PersonNumber")) for row in member_rows if is_current(row)}
+    fresh_profiles = fresh_profiles or {}
+    if active_ids and active_ids.issubset(fresh_profiles) and all(
+        isinstance(fresh_profiles[number], dict) for number in active_ids
+    ):
+        return ({number: dict(fresh_profiles[number]) for number in active_ids}, {
+            "snapshot_reused_members": len(active_ids),
+            "snapshot_scanned_members": 0,
+            "discovery_skipped": True,
+            "discovery": {"status": "skipped_complete_snapshot"},
+            "pages": [],
+        })
     sources, diagnostic = configured_party_profiles(member_rows)
     discovered, discovery_diagnostic = await discover_sp_party_profiles(member_rows)
     other_discovered, other_diagnostics = await discover_other_party_profiles(member_rows)
