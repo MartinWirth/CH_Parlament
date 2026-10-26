@@ -87,7 +87,9 @@ async function refreshSocialProfiles(requested,version,applyProfiles){
   try{
     const response=await fetch("/api/social-profiles/refresh?language="+encodeURIComponent(requested.toUpperCase()));
     if(!response.ok)throw Error("HTTP "+response.status);
-    applyProfiles(await response.json(),"aktualisiert");
+    const result=await response.json();
+    applyProfiles(result,"aktualisiert");
+    if(result.debug?.http_cache)debug("HTTP-Cache-Diagnostik",result.debug.http_cache);
     if(version===loadVersion)debug("Social-Media-Aktualisierung abgeschlossen",{duration_ms:Math.round(performance.now()-started)});
   }catch(err){if(version===loadVersion)debug("Social-Media-Aktualisierung fehlgeschlagen",{message:err.message})}
   finally{socialRefreshInProgress=false;button.disabled=false;if(debugPhase&&version===loadVersion){logBox.hidden=false;document.querySelector("#debug-toggle").textContent="Debug-Log ausblenden";logBox.scrollTop=logBox.scrollHeight;logBox.tabIndex=0;logBox.focus({preventScroll:true});debugCopyStatus.textContent="Aktualisierung abgeschlossen. Zum Kopieren auf „Debug-Log kopieren“ klicken."}}
