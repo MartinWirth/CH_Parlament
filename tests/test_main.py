@@ -179,3 +179,16 @@ def test_andreas_meier_verified_domain_only():
     assert approved_homepage_redirect("www.andreasmichaelmeier.ch", "www.andreasmeier.net")
     assert not approved_homepage_redirect("andreasmichaelmeier.ch", "unverified.example")
     assert not approved_homepage_redirect("fake.andreasmichaelmeier.ch", "andreasmeier.net")
+
+
+def test_cms_data_social_links_are_collected_separately():
+    from app.main import SocialLinkParser, personal_handle_matches
+
+    parser = SocialLinkParser()
+    parser.feed('<button data-social-url="https://www.instagram.com/jane_example/"></button>'
+                '<div data-href="https://www.instagram.com/party_official/"></div>')
+    assert "https://www.instagram.com/jane_example/" in parser.data_links
+    assert "https://www.instagram.com/party_official/" in parser.data_links
+    assert "https://www.instagram.com/jane_example/" not in parser.links
+    assert personal_handle_matches("https://www.instagram.com/jane_example/", "Jane Example")
+    assert not personal_handle_matches("https://www.instagram.com/party_official/", "Jane Example")
