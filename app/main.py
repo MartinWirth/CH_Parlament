@@ -689,6 +689,23 @@ def personal_handle_matches(url, person_name):
     return len(surname) >= 4 and surname in key(urlparse(url).path)
 
 
+def classify_unverified_social_candidate(url):
+    """Conservative classification; unknown handles always require review."""
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    path = parsed.path.strip("/").lower()
+    handle = path.split("/")[0] if path else ""
+    if host.endswith("linkedin.com") and handle in ("company", "school", "showcase"):
+        return "organization", "organization_profile_path"
+    if host.endswith("youtube.com") and handle in ("watch", "live", "playlist"):
+        return "content", "content_not_account"
+    if any(token in handle.replace("-", "").replace("_", "") for token in
+           ("spschweiz", "svpch", "fdpschweiz", "fdpliberalen",
+            "grueneschweiz", "glpschweiz", "diemitte", "evppev")):
+        return "organization", "known_party_handle"
+    return "requires_identity_verification", "no_confirmed_personal_identity"
+
+
 def prioritize_missing_homepages(details):
     """Rank actionable failures ahead of pages needing additional sources."""
     technical = {"fetch_error"}
@@ -764,6 +781,7 @@ async def homepage_profiles(communications, member_names=None):
         if number in enriched:
             continue
         review = []
+        organizations = []
         seen = set()
         sources = [(homepage, diagnostic)]
         sources.extend((url, detail) for url, _, detail in subpage_results.get(number, []))
@@ -777,13 +795,20 @@ async def homepage_profiles(communications, member_names=None):
                     platform = verified_social_url(candidate)
                 except (ValueError, UnicodeError):
                     continue
-                if platform and not personal_handle_matches(candidate, (member_names or {}).get(number, "")):
-                    review.append({"url": candidate, "platform": platform,
-                                   "source_page": source_url,
-                                   "extraction_source": item.get("source"),
-                                   "status": "requires_identity_verification",
-                                   "auto_accept": False})
+                if not platform or personal_handle_matches(candidate, (member_names or {}).get(number, "")):
+                    continue
+                status, reason = classify_unverified_social_candidate(candidate)
+                record = {"url": candidate, "platform": platform,
+                          "source_page": source_url,
+                          "extraction_source": item.get("source"),
+                          "status": status, "classification_reason": reason,
+                          "auto_accept": False}
+                if status == "requires_identity_verification":
+                    review.append(record)
+                else:
+                    organizations.append(record)
         diagnostic["unverified_personal_candidates"] = review[:30]
+        diagnostic["nonpersonal_social_candidates"] = organizations[:30]
     from collections import Counter
     statuses = Counter()
     missing_details = []
@@ -819,6 +844,7 @@ async def homepage_profiles(communications, member_names=None):
             "redirect_chain": diagnostic.get("redirects", []),
             "candidate_count": len(candidates),
             "unverified_personal_candidates": diagnostic.get("unverified_personal_candidates", []),
+            "nonpersonal_social_candidates": diagnostic.get("nonpersonal_social_candidates", []),
             "candidate_samples": candidates[:5],
             "candidate_diagnostics": [
                 {**item, "personal_handle_match": personal_handle_matches(item["url"], (member_names or {}).get(number, "")),
