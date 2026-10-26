@@ -560,6 +560,27 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                     diagnostic["html_bytes"] = len(content)
                     diagnostic["parser"] = dict(parser.link_diagnostics)
                     diagnostic["parser"]["candidate_urls"] = len(parser.links) + len(list(parser.social_references()))
+                if diagnostic is not None:
+                    internal = []
+                    for href in parser.links:
+                        try:
+                            target = urljoin(current, href)
+                            parsed_target = urlparse(target)
+                            path = parsed_target.path.lower().rstrip("/")
+                            if (parsed_target.scheme == "https"
+                                and parsed_target.hostname == urlparse(current).hostname
+                                and parsed_target.port in (None, 443)
+                                and not parsed_target.username and not parsed_target.password
+                                and not parsed_target.query and not parsed_target.fragment
+                                and target != current
+                                and any(path.endswith("/" + word) for word in
+                                    ("kontakt", "contact", "contatto", "about", "about-me",
+                                     "ueber-mich", "uber-mich", "social-media", "socialmedia", "links"))
+                                and target not in internal):
+                                internal.append(target)
+                        except (ValueError, UnicodeError):
+                            continue
+                    diagnostic["internal_page_candidates"] = internal[:2]
                 candidate_sources = [(item, "anchor_or_metadata") for item in parser.links]
                 candidate_sources += [(item, "json_ld_person_sameAs") for item in parser.social_references()]
                 candidate_sources += [(item, "raw_html_or_script") for item in raw_social]
@@ -666,6 +687,25 @@ async def homepage_profiles(communications, member_names=None):
     diagnostics = [{} for _ in homepages]
     async with httpx.AsyncClient(timeout=8, trust_env=False, headers={"User-Agent": "CH-Parlament/1.0"}) as client:
         results = await asyncio.gather(*(scan_homepage(client, url, semaphore, diagnostics[i]) for i, url in enumerate(homepages.values())))
+    # Follow only two relevant, same-host subpages for otherwise empty homepages.
+    subpage_results = {}
+    async with httpx.AsyncClient(timeout=8, trust_env=False, headers={"User-Agent": "CH-Parlament/1.0"}) as client:
+        jobs = []
+        for (number, _), links, diagnostic in zip(homepages.items(), results, diagnostics):
+            diagnostic["subpage_scans"] = []
+            if diagnostic.get("status") != "parsed" or links or diagnostic.get("raw_social_urls"):
+                diagnostic["subpage_scan_status"] = "skipped"
+                continue
+            candidates = diagnostic.get("internal_page_candidates", [])[:2]
+            diagnostic["subpage_scan_status"] = "queued" if candidates else "no_candidate"
+            for suburl in candidates:
+                detail = {"source_url": suburl}
+                diagnostic["subpage_scans"].append(detail)
+                jobs.append((number, suburl, detail))
+        if jobs:
+            fetched = await asyncio.gather(*(scan_homepage(client, url, semaphore, detail) for _, url, detail in jobs))
+            for (number, suburl, detail), links in zip(jobs, fetched):
+                subpage_results.setdefault(number, []).append((suburl, links, detail))
     enriched = {}
     for (number, _), links, diagnostic in zip(homepages.items(), results, diagnostics):
         combined = dict(links)
@@ -676,6 +716,15 @@ async def homepage_profiles(communications, member_names=None):
                 continue
             if platform and platform not in combined and personal_handle_matches(candidate, (member_names or {}).get(number, "")):
                 combined[platform] = candidate
+        for suburl, sublinks, subdiag in subpage_results.get(number, []):
+            for candidate in list(sublinks.values()) + subdiag.get("raw_social_urls", []) + subdiag.get("data_social_urls", []):
+                try:
+                    platform = verified_social_url(candidate)
+                except (ValueError, UnicodeError):
+                    continue
+                if platform and platform not in combined and personal_handle_matches(candidate, (member_names or {}).get(number, "")):
+                    combined[platform] = candidate
+                    subdiag.setdefault("accepted_personal_links", {})[platform] = candidate
         if combined:
             enriched[number] = combined
     from collections import Counter
@@ -719,6 +768,9 @@ async def homepage_profiles(communications, member_names=None):
             ],
             "parser_diagnostics": diagnostic.get("parser", {}),
             "data_attribute_count": len(diagnostic.get("data_social_urls", [])),
+            "subpage_scan_status": diagnostic.get("subpage_scan_status"),
+            "internal_page_candidates": diagnostic.get("internal_page_candidates", []),
+            "subpage_scans": diagnostic.get("subpage_scans", []),
         })
     homepage_report = {
         "checked": len(homepages),
