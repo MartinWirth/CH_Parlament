@@ -174,6 +174,7 @@ class SocialLinkParser(HTMLParser):
     def __init__(self):
         super().__init__()
         self.links = []
+        self.data_links = []
         self.json_documents = []
         self._json_ld = False
         self._json_chunks = []
@@ -189,6 +190,11 @@ class SocialLinkParser(HTMLParser):
             if tag not in ("meta", "link", "img", "input", "br", "hr", "source", "area"):
                 self._excluded_tags.append(tag)
             return
+        if tag in ("a", "button", "span", "div"):
+            for field in ("data-href", "data-url", "data-social-url"):
+                value = attrs.get(field, "")
+                if isinstance(value, str) and value.startswith(("https://", "http://", "//")):
+                    self.data_links.append(value)
         if tag == "a" and attrs.get("href"):
             self.link_diagnostics["anchors_total"] += 1
             self.links.append(attrs["href"])
@@ -547,6 +553,7 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                     if valid_social and candidate not in raw_social:
                         raw_social.append(candidate)
                 if diagnostic is not None:
+                    diagnostic["data_social_urls"] = [urljoin(current, item) for item in parser.data_links][:100]
                     diagnostic["raw_social_urls"] = raw_social[:40]
                     diagnostic["raw_social_count"] = len(raw_social)
                 if diagnostic is not None:
@@ -647,7 +654,7 @@ async def homepage_profiles(communications, member_names=None):
     enriched = {}
     for (number, _), links, diagnostic in zip(homepages.items(), results, diagnostics):
         combined = dict(links)
-        for candidate in diagnostic.get("raw_social_urls", []):
+        for candidate in diagnostic.get("raw_social_urls", []) + diagnostic.get("data_social_urls", []):
             try:
                 platform = verified_social_url(candidate)
             except (ValueError, UnicodeError):
