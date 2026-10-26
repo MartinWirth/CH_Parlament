@@ -267,10 +267,14 @@ _http_response_cache_max_bytes = 2_000_000
 _http_response_cache_path = Path(os.getenv("HTTP_RESPONSE_CACHE_PATH", str(ROOT.parent / ".http_response_cache.json")))
 _http_response_inflight = {}
 _http_response_cache_lock = None
-_http_cache_stats = {"hits": 0, "misses": 0, "coalesced": 0, "writes": 0, "write_ms": 0.0, "miss_new": 0, "miss_expired": 0, "miss_evicted": 0, "miss_uncacheable": 0, "miss_fetch_error": 0, "miss_response_rejected": 0, "reject_http_status": 0, "reject_content_type": 0, "reject_no_store": 0, "reject_private": 0, "reject_set_cookie": 0, "reject_oversize": 0}
+_http_cache_stats = {"hits": 0, "misses": 0, "coalesced": 0, "writes": 0, "write_ms": 0.0, "miss_new": 0, "miss_expired": 0, "miss_evicted": 0, "miss_uncacheable": 0, "miss_fetch_error": 0, "miss_response_rejected": 0, "reject_http_status": 0, "reject_content_type": 0, "reject_no_store": 0, "reject_private": 0, "reject_set_cookie": 0, "reject_oversize": 0, "negative_hits": 0}
 _http_cache_flush_task = None
 _http_cache_seen_urls = set()
 _http_cache_evicted_urls = set()
+_http_cache_rejections = {}
+_http_not_found_cache = {}
+_http_not_found_ttl = 300
+_http_not_found_max_entries = 256
 
 
 def http_cache_diagnostics():
@@ -330,6 +334,14 @@ def store_http_response(url, response):
         reasons.append("reject_set_cookie")
     for reason in reasons:
         _http_cache_stats[reason] += 1
+    if reasons:
+        from urllib.parse import urlsplit
+        host = (urlsplit(url).hostname or "unknown").lower()
+        key = (host, response.status_code)
+        record = _http_cache_rejections.setdefault(key, {"count": 0, "reasons": {}})
+        record["count"] += 1
+        for reason in reasons:
+            record["reasons"][reason] = record["reasons"].get(reason, 0) + 1
     if reasons:
         return
     if len(_http_response_cache) >= _http_response_cache_max_entries and url not in _http_response_cache:
@@ -391,6 +403,11 @@ async def cached_html_get(client, url, **kwargs):
     if _http_response_cache_lock is None:
         _http_response_cache_lock = asyncio.Lock()
     async with _http_response_cache_lock:
+        negative_until = _http_not_found_cache.get(url, 0)
+        if negative_until > time.monotonic():
+            _http_cache_stats["negative_hits"] += 1
+            return httpx.Response(404, request=httpx.Request("GET", url)), True
+        _http_not_found_cache.pop(url, None)
         cached = cached_http_response(url)
         if cached is not None:
             _http_cache_stats["hits"] += 1
@@ -411,6 +428,10 @@ async def cached_html_get(client, url, **kwargs):
                 except Exception:
                     _http_cache_stats["miss_fetch_error"] += 1
                     raise
+                if response.status_code == 404:
+                    if len(_http_not_found_cache) >= _http_not_found_max_entries:
+                        _http_not_found_cache.pop(next(iter(_http_not_found_cache)))
+                    _http_not_found_cache[url] = time.monotonic() + _http_not_found_ttl
                 store_http_response(url, response)
                 if cached_http_response(url) is None:
                     _http_cache_stats["miss_response_rejected"] += 1
@@ -1489,6 +1510,8 @@ async def social_profiles_cached(language: str = Query("DE", pattern="^(DE|FR|IT
 async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|IT|RM)$")):
     """Refresh profiles independently of the immediate cached response."""
     cache_before = http_cache_diagnostics()
+    rejection_before = {key: value["count"] for key, value in _http_cache_rejections.items()}
+    rejection_reason_before = {key: dict(value["reasons"]) for key, value in _http_cache_rejections.items()}
     refresh_started = time.monotonic()
     rows = await fetch_members(language)
     ids = {str(pick(row, "PersonNumber")) for row in rows if is_current(row)}
@@ -1543,8 +1566,24 @@ async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|I
     platforms = {platform: sum(platform in links for links in profiles.values()) for platform in _social_domains}
     data = {"profiles": profiles, "profiles_by_source": by_source, "updated_at": datetime.now(timezone.utc).isoformat(), "cached": False, "debug": {"party_sources": party_diagnostic, "party_members_added": party_added, "previous_links_retained": retained, "coverage": missing, "platforms": platforms, "homepages_checked": homepages, "homepage_diagnostics": homepage_report, "homepage_profiles": len(profiles), "communication_count": len(communications), "communication_error": diagnostic.get("error")}}
     cache_after = http_cache_diagnostics()
+    rejection_groups = []
+    for (host, status), record in _http_cache_rejections.items():
+        key = (host, status)
+        delta = record["count"] - rejection_before.get(key, 0)
+        if delta <= 0:
+            continue
+        prior = rejection_reason_before.get(key, {})
+        rejection_groups.append({
+            "domain": host, "http_status": status, "count": delta,
+            "reasons": {reason: count - prior.get(reason, 0)
+                        for reason, count in record["reasons"].items()
+                        if count > prior.get(reason, 0)},
+        })
+    rejection_groups.sort(key=lambda item: item["count"], reverse=True)
     data["debug"]["http_cache"] = {
         **cache_after,
+        "rejections_by_domain_status": rejection_groups[:30],
+        "refresh_negative_hits": cache_after["negative_hits"] - cache_before["negative_hits"],
         "refresh_hits": cache_after["hits"] - cache_before["hits"],
         "refresh_misses": cache_after["misses"] - cache_before["misses"],
         **{f"refresh_{key}": cache_after[key] - cache_before[key]
