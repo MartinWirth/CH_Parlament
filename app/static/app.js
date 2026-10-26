@@ -119,7 +119,7 @@ async function loadSocialProfiles(requested,version){
   }catch(err){debug("Social-Media-Cache nicht verfügbar",{message:err.message})}
   if(version!==loadVersion)return;
   const age=updatedAt?Date.now()-Date.parse(updatedAt):Infinity;
-  if(!debugPhase&&Number.isFinite(age)&&age>=0&&age<SOCIAL_TTL_MS){
+  if(Number.isFinite(age)&&age>=0&&age<SOCIAL_TTL_MS){
     debug("Social-Media-Aktualisierung übersprungen",{reason:"Cache jünger als 24 Stunden",age_minutes:Math.round(age/60000)});
     return;
   }
