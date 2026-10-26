@@ -429,7 +429,13 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                         if diagnostic is not None:
                             diagnostic.setdefault("retry_errors", []).append(type(exc).__name__)
                         if diagnostic is not None:
-                            diagnostic.setdefault("tls_attempts", []).append({"url": current, "attempt": attempt + 1, "outcome": "connect_error", "error_category": homepage_error_category(exc), "error_detail": str(exc)[:240]}) if not diagnostic.get("tls_attempts") or diagnostic["tls_attempts"][-1].get("outcome") else diagnostic["tls_attempts"][-1].update({"outcome": "connect_error", "error_category": homepage_error_category(exc), "error_detail": str(exc)[:240]})
+                            attempts = diagnostic.setdefault("tls_attempts", [])
+                            if attempts and attempts[-1].get("url") == current and "outcome" not in attempts[-1]:
+                                entry = attempts[-1]
+                            else:
+                                entry = {"url": current, "attempt": attempt + 1}
+                                attempts.append(entry)
+                            entry.update({"outcome": "connect_error", "error_category": homepage_error_category(exc), "error_detail": str(exc)[:240]})
                         detail = str(exc).lower()
                         certificate_error = any(token in detail for token in ("certificate", "hostname mismatch", "tls", "ssl", "handshake"))
                         parsed_current = urlparse(current)
