@@ -1537,14 +1537,56 @@ async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|I
     rows = await fetch_members(language)
     ids = {str(pick(row, "PersonNumber")) for row in rows if is_current(row)}
     communications, diagnostic = await fetch_communications(language, ids)
-    profiles, homepages, homepage_report = await homepage_profiles(communications, {str(pick(row, "PersonNumber")): normalize(row)["name"] for row in rows if is_current(row)})
-    personal_profiles = {number: dict(links) for number, links in profiles.items()}
-    parliament_profiles = communication_profiles(communications)
     previous = read_profile_snapshot().get(language, {})
     from datetime import timedelta
+    now = datetime.now(timezone.utc)
+    homepage_checked = previous.get("homepage_checked_at", {})
+    homepage_urls = previous.get("homepage_urls", {})
+    old_sources = previous.get("profiles_by_source", {})
+    current_homepages = {}
+    for row in communications:
+        if str(row.get("CommunicationTypeText", "")).lower() not in ("homepage", "page d'accueil", "sito internet"):
+            continue
+        url = homepage_url(row.get("Address"))
+        if url:
+            current_homepages.setdefault(str(row.get("PersonNumber")), url)
+    ttl_hours = max(1, min(720, int(os.getenv("SOCIAL_HOMEPAGE_TTL_HOURS", "24"))))
+    reusable_homepages = {}
+    if not force:
+        for number, url in current_homepages.items():
+            try:
+                stamp = datetime.fromisoformat(homepage_checked[number])
+                if (stamp.tzinfo is None or now - stamp.astimezone(timezone.utc) > timedelta(hours=ttl_hours)
+                        or homepage_urls.get(number) != url):
+                    continue
+                links = old_sources.get(number, {}).get("Parlamentarier-Homepage", {})
+                if not isinstance(links, dict):
+                    continue
+                reusable_homepages[number] = {
+                    platform: link for platform, link in links.items()
+                    if platform in _social_domains and isinstance(link, str)
+                    and verified_social_url(link)}
+            except (KeyError, ValueError, TypeError):
+                continue
+    scan_communications = [
+        row for row in communications
+        if str(row.get("PersonNumber")) not in reusable_homepages
+        or str(row.get("CommunicationTypeText", "")).lower() not in ("homepage", "page d'accueil", "sito internet")
+    ]
+    profiles, scanned_homepages, homepage_report = await homepage_profiles(
+        scan_communications,
+        {str(pick(row, "PersonNumber")): normalize(row)["name"] for row in rows if is_current(row)})
+    profiles.update(reusable_homepages)
+    homepages = len(current_homepages)
+    homepage_report["snapshot_reused_members"] = len(reusable_homepages)
+    homepage_report["snapshot_scanned_members"] = scanned_homepages
+    homepage_report["checked"] = homepages
+    homepage_report["with_personal_links"] = sum(bool(profiles.get(number)) for number in current_homepages)
+    homepage_report["without_personal_links"] = homepages - homepage_report["with_personal_links"]
+    personal_profiles = {number: dict(links) for number, links in profiles.items()}
+    parliament_profiles = communication_profiles(communications)
     checked = previous.get("party_checked_at", {})
     old_party = previous.get("profiles_by_source", {})
-    now = datetime.now(timezone.utc)
     fresh_party = {}
     if not force:
         for number in ids:
@@ -1605,7 +1647,14 @@ async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|I
     platforms = {platform: sum(platform in links for links in profiles.values()) for platform in _social_domains}
     checked_next = {number: checked[number] for number in fresh_party}
     checked_next.update({number: now.isoformat() for number in ids if number not in fresh_party})
-    data = {"party_checked_at": checked_next, "profiles": profiles, "profiles_by_source": by_source, "updated_at": datetime.now(timezone.utc).isoformat(), "cached": False, "debug": {"party_sources": party_diagnostic, "party_refresh_force": force, "party_refresh_reused": len(fresh_party), "party_members_added": party_added, "previous_links_retained": retained, "coverage": missing, "platforms": platforms, "homepages_checked": homepages, "homepage_diagnostics": homepage_report, "homepage_profiles": len(profiles), "communication_count": len(communications), "communication_error": diagnostic.get("error")}}
+    homepage_checked_next = {
+        number: homepage_checked[number] for number in reusable_homepages}
+    homepage_checked_next.update({
+        number: now.isoformat() for number in current_homepages
+        if number not in reusable_homepages})
+    data = {"homepage_checked_at": homepage_checked_next,
+            "homepage_urls": current_homepages,
+            "party_checked_at": checked_next, "profiles": profiles, "profiles_by_source": by_source, "updated_at": datetime.now(timezone.utc).isoformat(), "cached": False, "debug": {"party_sources": party_diagnostic, "party_refresh_force": force, "party_refresh_reused": len(fresh_party), "homepage_refresh_force": force, "homepage_refresh_reused": len(reusable_homepages), "homepage_refresh_scanned": scanned_homepages, "homepage_refresh_ttl_hours": ttl_hours, "party_members_added": party_added, "previous_links_retained": retained, "coverage": missing, "platforms": platforms, "homepages_checked": homepages, "homepage_diagnostics": homepage_report, "homepage_profiles": len(profiles), "communication_count": len(communications), "communication_error": diagnostic.get("error")}}
     cache_after = http_cache_diagnostics()
     rejection_groups = []
     for (host, status), record in _http_cache_rejections.items():
