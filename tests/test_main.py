@@ -198,7 +198,7 @@ def test_subpage_scan_finds_personal_link_and_ignores_party_account(monkeypatch)
     import asyncio
     import app.main as module
 
-    async def fake_scan(client, url, semaphore, diagnostic=None):
+    async def fake_scan(client, url, semaphore, diagnostic=None, timeout_retry_semaphore=None):
         diagnostic["status"] = "parsed"
         if url.endswith("/kontakt"):
             diagnostic["raw_social_urls"] = [
