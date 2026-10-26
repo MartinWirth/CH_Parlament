@@ -1729,6 +1729,71 @@ async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|I
     return data
 
 
+@app.get("/api/social-profiles/missing-homepage-diagnostic")
+async def missing_homepage_diagnostic(
+    language: str = Query("DE", pattern="^(DE|FR|IT|RM)$"),
+    scan: bool = Query(False),
+):
+    """Identify uncovered members with homepages; scan only those on demand.
+
+    The default is network-light and does not invalidate the normal refresh
+    snapshot. scan=true inspects at most 30 missing homepages for review.
+    """
+    rows = await fetch_members(language)
+    current = {
+        str(pick(row, "PersonNumber")): normalize(row)["name"]
+        for row in rows if is_current(row)
+    }
+    communications, communication_diagnostic = await fetch_communications(
+        language, set(current)
+    )
+    snapshot = read_profile_snapshot().get(language, {})
+    covered = {
+        number for number, links in snapshot.get("profiles", {}).items()
+        if number in current and isinstance(links, dict) and bool(links)
+    }
+    missing = {}
+    selected_rows = {}
+    for row in communications:
+        number = str(row.get("PersonNumber"))
+        if number not in current or number in covered:
+            continue
+        if str(row.get("CommunicationTypeText", "")).lower() not in (
+            "homepage", "page d'accueil", "sito internet"
+        ):
+            continue
+        url = homepage_url(row.get("Address"))
+        if url and number not in missing:
+            missing[number] = {"person_number": number, "name": current[number],
+                               "homepage": url}
+            selected_rows[number] = row
+    cases = sorted(missing.values(), key=lambda item: item["name"].casefold())
+    result = {
+        "language": language, "snapshot_updated_at": snapshot.get("updated_at"),
+        "missing_homepage_count": len(cases), "cases": cases,
+        "scan_requested": scan,
+        "communication_error": communication_diagnostic.get("error"),
+    }
+    if scan:
+        numbers = {item["person_number"] for item in cases[:30]}
+        _, _, report = await homepage_profiles(
+            [selected_rows[number] for number in numbers],
+            {number: current[number] for number in numbers},
+        )
+        detail_by_number = {
+            str(item["person_number"]): item
+            for item in report.get("missing_details", [])
+        }
+        for item in cases:
+            item["scan"] = detail_by_number.get(item["person_number"]) if item["person_number"] in numbers else None
+        result["scanned_count"] = len(numbers)
+        result["scan_report"] = {
+            "reasons": report.get("reasons", {}),
+            "fetch_statuses": report.get("fetch_statuses", {}),
+        }
+    return result
+
+
 @app.get("/api/person-communications-diagnostic")
 async def person_communications_diagnostic(person_number: int = Query(4100, ge=1)):
     """Compare unfiltered Person results, filtered lookup, and person navigation."""
