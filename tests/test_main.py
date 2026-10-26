@@ -192,3 +192,31 @@ def test_cms_data_social_links_are_collected_separately():
     assert "https://www.instagram.com/jane_example/" not in parser.links
     assert personal_handle_matches("https://www.instagram.com/jane_example/", "Jane Example")
     assert not personal_handle_matches("https://www.instagram.com/party_official/", "Jane Example")
+
+
+def test_subpage_scan_finds_personal_link_and_ignores_party_account(monkeypatch):
+    import asyncio
+    import app.main as module
+
+    async def fake_scan(client, url, semaphore, diagnostic=None):
+        diagnostic["status"] = "parsed"
+        if url.endswith("/kontakt"):
+            diagnostic["raw_social_urls"] = [
+                "https://www.instagram.com/jane_example/",
+                "https://www.instagram.com/party_official/",
+            ]
+            return {}
+        diagnostic["raw_social_urls"] = ["https://www.instagram.com/party_official/"]
+        diagnostic["internal_page_candidates"] = ["https://example.org/kontakt"]
+        return {}
+
+    monkeypatch.setattr(module, "scan_homepage", fake_scan)
+    monkeypatch.setattr(module, "save_homepage_cache", lambda: None)
+    communications = [{"CommunicationTypeText": "Homepage", "Address": "https://example.org/",
+                       "PersonNumber": "1"}]
+    profiles, checked, report = asyncio.run(
+        module.homepage_profiles(communications, {"1": "Jane Example"})
+    )
+    assert checked == 1
+    assert profiles["1"]["Instagram"] == "https://www.instagram.com/jane_example/"
+    assert report["with_personal_links"] == 1
