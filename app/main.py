@@ -259,6 +259,37 @@ class SocialLinkParser(HTMLParser):
 
 _homepage_cache = {}
 _homepage_cache_ttl = 86400
+# Cache successful HTTP responses separately from extracted social-profile links.
+_http_response_cache = {}
+_http_response_cache_ttl = 3600
+_http_response_cache_max_entries = 256
+_http_response_cache_max_bytes = 2_000_000
+
+
+def cached_http_response(url):
+    entry = _http_response_cache.get(url)
+    if not entry:
+        return None
+    checked_at, status, headers, content = entry
+    if time.monotonic() - checked_at >= _http_response_cache_ttl:
+        _http_response_cache.pop(url, None)
+        return None
+    return httpx.Response(status, headers=headers, content=content, request=httpx.Request("GET", url))
+
+
+def store_http_response(url, response):
+    if (response.status_code != 200 or
+        len(response.content) > _http_response_cache_max_bytes or
+        "text/html" not in response.headers.get("content-type", "").lower()):
+        return
+    if len(_http_response_cache) >= _http_response_cache_max_entries:
+        oldest = min(_http_response_cache, key=lambda key: _http_response_cache[key][0])
+        _http_response_cache.pop(oldest, None)
+    _http_response_cache[url] = (
+        time.monotonic(), response.status_code,
+        {"content-type": response.headers.get("content-type", "")},
+        bytes(response.content))
+
 _cache_path = Path(os.getenv("SOCIAL_CACHE_PATH", str(ROOT.parent / ".social_profiles_cache.json")))
 
 def load_homepage_cache():
@@ -417,7 +448,7 @@ async def scan_homepage(client, url, semaphore, diagnostic=None, timeout_retry_s
     async with semaphore:
         found = {}
         if diagnostic is not None:
-            diagnostic.update({"status": "pending", "http_status": None, "final_url": url, "redirects": [], "cache_hit": bool(cached and now - cached[0] < _homepage_cache_ttl)})
+            diagnostic.update({"status": "pending", "http_status": None, "final_url": url, "redirects": [], "cache_hit": bool(cached and now - cached[0] < _homepage_cache_ttl), "http_response_cache_hit": False})
         try:
             current = canonical_homepage_url(url)
             original = urlparse(current)
@@ -436,11 +467,16 @@ async def scan_homepage(client, url, semaphore, diagnostic=None, timeout_retry_s
                         stage = "http_get"
                         if diagnostic is not None:
                             diagnostic.setdefault("tls_attempts", []).append({"url": current, "attempt": attempt + 1})
-                        if attempt and timeout_retry_semaphore is not None:
+                        response = cached_http_response(current)
+                        if response is not None:
+                            if diagnostic is not None:
+                                diagnostic["http_response_cache_hit"] = True
+                        elif attempt and timeout_retry_semaphore is not None:
                             async with timeout_retry_semaphore:
                                 response = await client.get(current, follow_redirects=False, timeout=12)
                         else:
                             response = await client.get(current, follow_redirects=False, timeout=12 if attempt else 8)
+                        store_http_response(current, response)
                         if diagnostic is not None:
                             diagnostic["tls_attempts"][-1].update({"outcome": "http_response", "http_status": response.status_code})
                         break
