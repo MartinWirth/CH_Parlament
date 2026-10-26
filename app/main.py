@@ -425,7 +425,7 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                         if diagnostic is not None:
                             diagnostic.setdefault("retry_errors", []).append(type(exc).__name__)
                         detail = str(exc).lower()
-                        certificate_error = "certificate" in detail or "hostname mismatch" in detail
+                        certificate_error = any(token in detail for token in ("certificate", "hostname mismatch", "tls", "ssl", "handshake"))
                         parsed_current = urlparse(current)
                         host = parsed_current.hostname or ""
                         # Only explicitly verified personal-site hosts are retried
