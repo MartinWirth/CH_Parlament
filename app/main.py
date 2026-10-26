@@ -264,6 +264,9 @@ _http_response_cache = {}
 _http_response_cache_ttl = 3600
 _http_response_cache_max_entries = 256
 _http_response_cache_max_bytes = 2_000_000
+_http_response_cache_path = Path(os.getenv("HTTP_RESPONSE_CACHE_PATH", str(ROOT.parent / ".http_response_cache.json")))
+_http_response_inflight = {}
+_http_response_cache_lock = None
 
 
 def cached_http_response(url):
@@ -271,7 +274,7 @@ def cached_http_response(url):
     if not entry:
         return None
     checked_at, status, headers, content = entry
-    if time.monotonic() - checked_at >= _http_response_cache_ttl:
+    if time.time() - checked_at >= _http_response_cache_ttl:
         _http_response_cache.pop(url, None)
         return None
     return httpx.Response(status, headers=headers, content=content, request=httpx.Request("GET", url))
@@ -280,15 +283,86 @@ def cached_http_response(url):
 def store_http_response(url, response):
     if (response.status_code != 200 or
         len(response.content) > _http_response_cache_max_bytes or
-        "text/html" not in response.headers.get("content-type", "").lower()):
+        "text/html" not in response.headers.get("content-type", "").lower() or
+        "no-store" in response.headers.get("cache-control", "").lower() or
+        "private" in response.headers.get("cache-control", "").lower() or
+        "set-cookie" in response.headers):
         return
-    if len(_http_response_cache) >= _http_response_cache_max_entries:
+    if len(_http_response_cache) >= _http_response_cache_max_entries and url not in _http_response_cache:
         oldest = min(_http_response_cache, key=lambda key: _http_response_cache[key][0])
         _http_response_cache.pop(oldest, None)
     _http_response_cache[url] = (
-        time.monotonic(), response.status_code,
+        time.time(), response.status_code,
         {"content-type": response.headers.get("content-type", "")},
         bytes(response.content))
+
+
+def load_http_response_cache():
+    import base64
+    try:
+        entries = json.loads(_http_response_cache_path.read_text(encoding="utf-8"))
+        if not isinstance(entries, dict):
+            return
+        for url, entry in list(entries.items())[:_http_response_cache_max_entries]:
+            if (not isinstance(url, str) or not url.startswith("https://") or
+                time.time() - entry["checked_at"] >= _http_response_cache_ttl):
+                continue
+            content = base64.b64decode(entry["body"], validate=True)
+            if len(content) > _http_response_cache_max_bytes:
+                continue
+            _http_response_cache[url] = (
+                entry["checked_at"], 200,
+                {"content-type": entry["content_type"]}, content)
+    except (OSError, ValueError, TypeError, KeyError, UnicodeError):
+        logger.info("No usable persistent HTTP response cache")
+
+
+def save_http_response_cache():
+    import base64
+    try:
+        entries = {
+            url: {"checked_at": timestamp, "content_type": headers["content-type"],
+                  "body": base64.b64encode(content).decode("ascii")}
+            for url, (timestamp, status, headers, content) in _http_response_cache.items()
+            if status == 200 and time.time() - timestamp < _http_response_cache_ttl
+        }
+        temporary = _http_response_cache_path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(entries), encoding="utf-8")
+        temporary.replace(_http_response_cache_path)
+    except OSError as exc:
+        logger.warning("HTTP response cache write failed: %s", exc)
+
+
+async def cached_html_get(client, url, **kwargs):
+    """Coalesce concurrent identical HTML GETs; never cache errors or API JSON."""
+    global _http_response_cache_lock
+    # Only safe, parameter-free public HTTPS pages are eligible.
+    if (not url.startswith("https://") or kwargs.get("params") is not None or
+        kwargs.get("headers") or kwargs.get("auth")):
+        return await client.get(url, **kwargs), False
+    if _http_response_cache_lock is None:
+        _http_response_cache_lock = asyncio.Lock()
+    async with _http_response_cache_lock:
+        cached = cached_http_response(url)
+        if cached is not None:
+            return cached, True
+        task = _http_response_inflight.get(url)
+        if task is None:
+            async def fetch():
+                response = await client.get(url, **kwargs)
+                store_http_response(url, response)
+                if cached_http_response(url) is not None:
+                    save_http_response_cache()
+                return response
+            task = asyncio.create_task(fetch())
+            _http_response_inflight[url] = task
+            task.add_done_callback(
+                lambda done, key=url: _http_response_inflight.pop(key, None)
+                if _http_response_inflight.get(key) is done else None)
+    return await asyncio.shield(task), False
+
+
+load_http_response_cache()
 
 _cache_path = Path(os.getenv("SOCIAL_CACHE_PATH", str(ROOT.parent / ".social_profiles_cache.json")))
 
@@ -467,16 +541,13 @@ async def scan_homepage(client, url, semaphore, diagnostic=None, timeout_retry_s
                         stage = "http_get"
                         if diagnostic is not None:
                             diagnostic.setdefault("tls_attempts", []).append({"url": current, "attempt": attempt + 1})
-                        response = cached_http_response(current)
-                        if response is not None:
-                            if diagnostic is not None:
-                                diagnostic["http_response_cache_hit"] = True
-                        elif attempt and timeout_retry_semaphore is not None:
+                        if attempt and timeout_retry_semaphore is not None:
                             async with timeout_retry_semaphore:
-                                response = await client.get(current, follow_redirects=False, timeout=12)
+                                response, cache_hit = await cached_html_get(client, current, follow_redirects=False, timeout=12)
                         else:
-                            response = await client.get(current, follow_redirects=False, timeout=12 if attempt else 8)
-                        store_http_response(current, response)
+                            response, cache_hit = await cached_html_get(client, current, follow_redirects=False, timeout=12 if attempt else 8)
+                        if diagnostic is not None:
+                            diagnostic["http_response_cache_hit"] = cache_hit
                         if diagnostic is not None:
                             diagnostic["tls_attempts"][-1].update({"outcome": "http_response", "http_status": response.status_code})
                         break
@@ -969,7 +1040,7 @@ async def discover_sp_party_profiles(member_rows):
     found = {}
     try:
         async with httpx.AsyncClient(timeout=8, trust_env=False, follow_redirects=False) as client:
-            response = await client.get(roster_url)
+            response, _ = await cached_html_get(client, roster_url)
             response.raise_for_status()
             if "text/html" not in response.headers.get("content-type", "").lower() or len(response.content) > 400_000:
                 diagnostics["status"] = "invalid_html"
