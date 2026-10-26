@@ -693,7 +693,7 @@ async def homepage_profiles(communications, member_names=None):
         jobs = []
         for (number, _), links, diagnostic in zip(homepages.items(), results, diagnostics):
             diagnostic["subpage_scans"] = []
-            if diagnostic.get("status") != "parsed" or links or diagnostic.get("raw_social_urls"):
+            if diagnostic.get("status") != "parsed" or any(personal_handle_matches(url, (member_names or {}).get(number, "")) for url in list(links.values()) + diagnostic.get("raw_social_urls", []) + diagnostic.get("data_social_urls", [])):
                 diagnostic["subpage_scan_status"] = "skipped"
                 continue
             candidates = diagnostic.get("internal_page_candidates", [])[:2]
