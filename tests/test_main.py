@@ -231,3 +231,16 @@ def test_navigation_link_labels_collected_for_subpage_discovery():
     assert parser.navigation_links[0]["href"] == "/team/person"
     assert "Biografie" in parser.navigation_links[0]["text"]
     assert "À propos" in parser.navigation_links[1]["text"]
+
+
+def test_classify_unverified_social_candidates():
+    from app.main import classify_unverified_social_candidate
+
+    assert classify_unverified_social_candidate(
+        "https://www.instagram.com/spschweiz/")[0] == "organization"
+    assert classify_unverified_social_candidate(
+        "https://www.linkedin.com/company/elektroplan/")[0] == "organization"
+    assert classify_unverified_social_candidate(
+        "https://www.youtube.com/live/abc123")[0] == "content"
+    assert classify_unverified_social_candidate(
+        "https://www.instagram.com/unknown_private_handle/")[0] == "requires_identity_verification"
