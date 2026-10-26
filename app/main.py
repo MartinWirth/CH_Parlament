@@ -430,12 +430,11 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                         host = parsed_current.hostname or ""
                         # Jauslin's independently verified personal site is on a
                         # different domain. Use it only after a TLS failure.
-                        verified_alternate = (
-                            "www.mjauslin.ch"
-                            if original.hostname in ("jauslin.com", "www.jauslin.com")
-                            and host in ("jauslin.com", "www.jauslin.com")
-                            else None
-                        )
+                        verified_alternate = None
+                        if original.hostname in ("jauslin.com", "www.jauslin.com") and host == original.hostname:
+                            verified_alternate = "www.mjauslin.ch"
+                        elif original.hostname == "www.nicolo-paganini.die-mitte.ch" and host == original.hostname:
+                            verified_alternate = "nicolo-paganini.die-mitte.ch"
                         if verified_alternate and attempt == 0:
                             alternate = canonical_homepage_url(
                                 urlunparse(parsed_current._replace(netloc=verified_alternate))
