@@ -159,3 +159,14 @@ def test_jauslin_verified_redirect_only():
     assert approved_homepage_redirect("jauslin.com", "mjauslin.ch")
     assert not approved_homepage_redirect("jauslin.com", "unverified.example")
     assert not approved_homepage_redirect("fake.jauslin.com", "mjauslin.ch")
+
+
+def test_tls_handshake_error_is_classified_and_unverified_redirect_rejected():
+    import httpx
+    from app.main import homepage_error_category, approved_homepage_redirect
+
+    assert homepage_error_category(httpx.ConnectError("TLS handshake failed")) == "tls_certificate"
+    assert homepage_error_category(httpx.ConnectError("SSL handshake failure")) == "tls_certificate"
+    assert not approved_homepage_redirect("mauro-tuena.ch", "unverified.example")
+    assert not approved_homepage_redirect("reginesauter.ch", "unverified.example")
+    assert not approved_homepage_redirect("andreasmichaelmeier.ch", "unverified.example")
