@@ -267,6 +267,35 @@ _http_response_cache_max_bytes = 2_000_000
 _http_response_cache_path = Path(os.getenv("HTTP_RESPONSE_CACHE_PATH", str(ROOT.parent / ".http_response_cache.json")))
 _http_response_inflight = {}
 _http_response_cache_lock = None
+_http_cache_stats = {"hits": 0, "misses": 0, "coalesced": 0, "writes": 0, "write_ms": 0.0}
+_http_cache_flush_task = None
+
+
+def http_cache_diagnostics():
+    return {**_http_cache_stats, "entries": len(_http_response_cache),
+            "inflight": len(_http_response_inflight)}
+
+
+async def flush_http_response_cache():
+    """Batch persistence outside the request path and event loop."""
+    global _http_cache_flush_task
+    try:
+        await asyncio.sleep(1.0)
+        started = time.monotonic()
+        await asyncio.to_thread(save_http_response_cache)
+        elapsed = round((time.monotonic() - started) * 1000, 1)
+        _http_cache_stats["writes"] += 1
+        _http_cache_stats["write_ms"] += elapsed
+        logger.info("HTTP cache diagnostics: %s", http_cache_diagnostics())
+    finally:
+        _http_cache_flush_task = None
+
+
+def schedule_http_cache_flush():
+    global _http_cache_flush_task
+    if _http_cache_flush_task is None or _http_cache_flush_task.done():
+        _http_cache_flush_task = asyncio.create_task(flush_http_response_cache())
+
 
 
 def cached_http_response(url):
@@ -345,20 +374,24 @@ async def cached_html_get(client, url, **kwargs):
     async with _http_response_cache_lock:
         cached = cached_http_response(url)
         if cached is not None:
+            _http_cache_stats["hits"] += 1
             return cached, True
         task = _http_response_inflight.get(url)
         if task is None:
+            _http_cache_stats["misses"] += 1
             async def fetch():
                 response = await client.get(url, **kwargs)
                 store_http_response(url, response)
                 if cached_http_response(url) is not None:
-                    save_http_response_cache()
+                    schedule_http_cache_flush()
                 return response
             task = asyncio.create_task(fetch())
             _http_response_inflight[url] = task
             task.add_done_callback(
                 lambda done, key=url: _http_response_inflight.pop(key, None)
                 if _http_response_inflight.get(key) is done else None)
+        else:
+            _http_cache_stats["coalesced"] += 1
     return await asyncio.shield(task), False
 
 
