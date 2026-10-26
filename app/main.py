@@ -419,11 +419,17 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                 for attempt in range(2):
                     try:
                         stage = "http_get"
+                        if diagnostic is not None:
+                            diagnostic.setdefault("tls_attempts", []).append({"url": current, "attempt": attempt + 1})
                         response = await client.get(current, follow_redirects=False)
+                        if diagnostic is not None:
+                            diagnostic["tls_attempts"][-1].update({"outcome": "http_response", "http_status": response.status_code})
                         break
                     except httpx.ConnectError as exc:
                         if diagnostic is not None:
                             diagnostic.setdefault("retry_errors", []).append(type(exc).__name__)
+                        if diagnostic is not None:
+                            diagnostic.setdefault("tls_attempts", []).append({"url": current, "attempt": attempt + 1, "outcome": "connect_error", "error_category": homepage_error_category(exc), "error_detail": str(exc)[:240]}) if not diagnostic.get("tls_attempts") or diagnostic["tls_attempts"][-1].get("outcome") else diagnostic["tls_attempts"][-1].update({"outcome": "connect_error", "error_category": homepage_error_category(exc), "error_detail": str(exc)[:240]})
                         detail = str(exc).lower()
                         certificate_error = any(token in detail for token in ("certificate", "hostname mismatch", "tls", "ssl", "handshake"))
                         parsed_current = urlparse(current)
@@ -449,6 +455,8 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                                 continue
                         alternate_host = host[4:] if host.startswith("www.") else "www." + host
                         if not certificate_error or attempt > 0 or not same_site_www_redirect(host, alternate_host):
+                            if diagnostic is not None:
+                                diagnostic["tls_fallback_decision"] = "not_eligible_or_already_retried"
                             raise
                         alternate = canonical_homepage_url(urlunparse(parsed_current._replace(netloc=alternate_host)))
                         if alternate in alternate_tried or not await asyncio.to_thread(public_hostname, alternate_host):
