@@ -346,6 +346,7 @@ def approved_homepage_redirect(source_host, target_host):
             "andrisilberschmidt.ch": "silberschmidt2027.ch",
             "marc-jost.ch": "marcjost.ch",
             "jauslin.com": "mjauslin.ch",
+            "andreasmichaelmeier.ch": "andreasmeier.net",
             "susanne-vincenz-stauffacher.ch": "vincenz-stauffacher.ch",
         }
         pairs = json.loads(os.getenv("APPROVED_HOMEPAGE_REDIRECTS", "{}"))
@@ -445,6 +446,8 @@ async def scan_homepage(client, url, semaphore, diagnostic=None):
                         verified_alternate = None
                         if original.hostname in ("jauslin.com", "www.jauslin.com") and host == original.hostname:
                             verified_alternate = "www.mjauslin.ch"
+                        elif original.hostname in ("andreasmichaelmeier.ch", "www.andreasmichaelmeier.ch") and host == original.hostname and certificate_error:
+                            verified_alternate = "www.andreasmeier.net"
                         elif original.hostname == "www.nicolo-paganini.die-mitte.ch" and host == original.hostname:
                             verified_alternate = "nicolo-paganini.die-mitte.ch"
                         if verified_alternate and attempt == 0:
