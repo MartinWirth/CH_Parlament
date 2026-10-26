@@ -1456,6 +1456,8 @@ async def social_profiles_cached(language: str = Query("DE", pattern="^(DE|FR|IT
 @app.get("/api/social-profiles/refresh")
 async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|IT|RM)$")):
     """Refresh profiles independently of the immediate cached response."""
+    cache_before = http_cache_diagnostics()
+    refresh_started = time.monotonic()
     rows = await fetch_members(language)
     ids = {str(pick(row, "PersonNumber")) for row in rows if is_current(row)}
     communications, diagnostic = await fetch_communications(language, ids)
@@ -1508,6 +1510,16 @@ async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|I
     }
     platforms = {platform: sum(platform in links for links in profiles.values()) for platform in _social_domains}
     data = {"profiles": profiles, "profiles_by_source": by_source, "updated_at": datetime.now(timezone.utc).isoformat(), "cached": False, "debug": {"party_sources": party_diagnostic, "party_members_added": party_added, "previous_links_retained": retained, "coverage": missing, "platforms": platforms, "homepages_checked": homepages, "homepage_diagnostics": homepage_report, "homepage_profiles": len(profiles), "communication_count": len(communications), "communication_error": diagnostic.get("error")}}
+    cache_after = http_cache_diagnostics()
+    data["debug"]["http_cache"] = {
+        **cache_after,
+        "refresh_hits": cache_after["hits"] - cache_before["hits"],
+        "refresh_misses": cache_after["misses"] - cache_before["misses"],
+        "refresh_coalesced": cache_after["coalesced"] - cache_before["coalesced"],
+        "refresh_writes": cache_after["writes"] - cache_before["writes"],
+        "refresh_write_ms": round(cache_after["write_ms"] - cache_before["write_ms"], 1),
+        "refresh_duration_ms": round((time.monotonic() - refresh_started) * 1000),
+    }
     snapshot = read_profile_snapshot()
     snapshot[language] = data
     save_profile_snapshot(snapshot)
