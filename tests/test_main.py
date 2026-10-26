@@ -220,3 +220,14 @@ def test_subpage_scan_finds_personal_link_and_ignores_party_account(monkeypatch)
     assert checked == 1
     assert profiles["1"]["Instagram"] == "https://www.instagram.com/jane_example/"
     assert report["with_personal_links"] == 1
+
+
+def test_navigation_link_labels_collected_for_subpage_discovery():
+    from app.main import SocialLinkParser
+
+    parser = SocialLinkParser()
+    parser.feed('<a href="/team/person"><span>Biografie</span></a>'
+                '<a href="/info" aria-label="À propos">Details</a>')
+    assert parser.navigation_links[0]["href"] == "/team/person"
+    assert "Biografie" in parser.navigation_links[0]["text"]
+    assert "À propos" in parser.navigation_links[1]["text"]
