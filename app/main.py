@@ -1390,6 +1390,20 @@ async def party_profile_links(member_rows):
     if not sources:
         diagnostic["pages"] = []
         return {}, diagnostic
+    # Diagnose repeated FDP profile URLs without logging query parameters or personal data.
+    from collections import Counter
+    fdp_urls = [url for url in sources.values()
+                if urlparse(url).hostname in ("fdp.ch", "www.fdp.ch")]
+    fdp_exact_counts = Counter(fdp_urls)
+    fdp_path_counts = Counter((urlparse(url).hostname, urlparse(url).path.rstrip("/"))
+                              for url in fdp_urls)
+    diagnostic["fdp_url_reuse"] = {
+        "total": len(fdp_urls),
+        "unique_exact": len(fdp_exact_counts),
+        "duplicate_exact": sum(count - 1 for count in fdp_exact_counts.values()),
+        "unique_paths": len(fdp_path_counts),
+        "same_path_different_query": sum(count - 1 for count in fdp_path_counts.values()),
+    }
     semaphore = asyncio.Semaphore(8)
     members = {str(pick(row, "PersonNumber")): normalize(row)["name"] for row in member_rows if is_current(row)}
     def ascii_key(value):
