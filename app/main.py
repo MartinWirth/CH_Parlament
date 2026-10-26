@@ -267,8 +267,10 @@ _http_response_cache_max_bytes = 2_000_000
 _http_response_cache_path = Path(os.getenv("HTTP_RESPONSE_CACHE_PATH", str(ROOT.parent / ".http_response_cache.json")))
 _http_response_inflight = {}
 _http_response_cache_lock = None
-_http_cache_stats = {"hits": 0, "misses": 0, "coalesced": 0, "writes": 0, "write_ms": 0.0}
+_http_cache_stats = {"hits": 0, "misses": 0, "coalesced": 0, "writes": 0, "write_ms": 0.0, "miss_new": 0, "miss_expired": 0, "miss_evicted": 0, "miss_uncacheable": 0, "miss_fetch_error": 0, "miss_response_rejected": 0}
 _http_cache_flush_task = None
+_http_cache_seen_urls = set()
+_http_cache_evicted_urls = set()
 
 
 def http_cache_diagnostics():
@@ -305,6 +307,7 @@ def cached_http_response(url):
     checked_at, status, headers, content = entry
     if time.time() - checked_at >= _http_response_cache_ttl:
         _http_response_cache.pop(url, None)
+        _http_cache_evicted_urls.add(url)
         return None
     return httpx.Response(status, headers=headers, content=content, request=httpx.Request("GET", url))
 
@@ -320,6 +323,9 @@ def store_http_response(url, response):
     if len(_http_response_cache) >= _http_response_cache_max_entries and url not in _http_response_cache:
         oldest = min(_http_response_cache, key=lambda key: _http_response_cache[key][0])
         _http_response_cache.pop(oldest, None)
+        _http_cache_evicted_urls.add(oldest)
+    _http_cache_seen_urls.add(url)
+    _http_cache_evicted_urls.discard(url)
     _http_response_cache[url] = (
         time.time(), response.status_code,
         {"content-type": response.headers.get("content-type", "")},
@@ -368,6 +374,7 @@ async def cached_html_get(client, url, **kwargs):
     # Only safe, parameter-free public HTTPS pages are eligible.
     if (not url.startswith("https://") or kwargs.get("params") is not None or
         kwargs.get("headers") or kwargs.get("auth")):
+        _http_cache_stats["miss_uncacheable"] += 1
         return await client.get(url, **kwargs), False
     if _http_response_cache_lock is None:
         _http_response_cache_lock = asyncio.Lock()
@@ -379,9 +386,22 @@ async def cached_html_get(client, url, **kwargs):
         task = _http_response_inflight.get(url)
         if task is None:
             _http_cache_stats["misses"] += 1
+            if url in _http_cache_evicted_urls:
+                _http_cache_stats["miss_evicted"] += 1
+            elif url in _http_cache_seen_urls:
+                _http_cache_stats["miss_expired"] += 1
+            else:
+                _http_cache_stats["miss_new"] += 1
+            _http_cache_seen_urls.add(url)
             async def fetch():
-                response = await client.get(url, **kwargs)
+                try:
+                    response = await client.get(url, **kwargs)
+                except Exception:
+                    _http_cache_stats["miss_fetch_error"] += 1
+                    raise
                 store_http_response(url, response)
+                if cached_http_response(url) is None:
+                    _http_cache_stats["miss_response_rejected"] += 1
                 if cached_http_response(url) is not None:
                     schedule_http_cache_flush()
                 return response
@@ -1515,6 +1535,9 @@ async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|I
         **cache_after,
         "refresh_hits": cache_after["hits"] - cache_before["hits"],
         "refresh_misses": cache_after["misses"] - cache_before["misses"],
+        **{f"refresh_{key}": cache_after[key] - cache_before[key]
+           for key in ("miss_new", "miss_expired", "miss_evicted", "miss_uncacheable",
+                       "miss_fetch_error", "miss_response_rejected")},
         "refresh_coalesced": cache_after["coalesced"] - cache_before["coalesced"],
         "refresh_writes": cache_after["writes"] - cache_before["writes"],
         "refresh_write_ms": round(cache_after["write_ms"] - cache_before["write_ms"], 1),
