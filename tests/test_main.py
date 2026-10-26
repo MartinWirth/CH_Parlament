@@ -170,3 +170,12 @@ def test_tls_handshake_error_is_classified_and_unverified_redirect_rejected():
     assert not approved_homepage_redirect("mauro-tuena.ch", "unverified.example")
     assert not approved_homepage_redirect("reginesauter.ch", "unverified.example")
     assert not approved_homepage_redirect("andreasmichaelmeier.ch", "unverified.example")
+
+
+def test_andreas_meier_verified_domain_only():
+    from app.main import approved_homepage_redirect
+
+    assert approved_homepage_redirect("andreasmichaelmeier.ch", "andreasmeier.net")
+    assert approved_homepage_redirect("www.andreasmichaelmeier.ch", "www.andreasmeier.net")
+    assert not approved_homepage_redirect("andreasmichaelmeier.ch", "unverified.example")
+    assert not approved_homepage_redirect("fake.andreasmichaelmeier.ch", "andreasmeier.net")
