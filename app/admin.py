@@ -463,3 +463,14 @@ async def admin_data_health_regressions(
             invalid_increase=invalid_increase)
     except ValueError:
         raise HTTPException(422, "Invalid regression query")
+
+
+@router.get("/social-discovery/worklist")
+async def admin_social_discovery_worklist(request: Request, language: str = "DE",
+                                          limit: int = 50, platform: str = "all"):
+    _require(request)
+    from .social_discovery_worklist import discovery_worklist
+    try:
+        return discovery_worklist(language, limit=limit, platform=platform)
+    except ValueError:
+        raise HTTPException(422, "Invalid social discovery query")
