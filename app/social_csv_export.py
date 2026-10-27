@@ -18,23 +18,30 @@ def safe_cell(value):
     if isinstance(value, bool):
         return 'true' if value else 'false'
     value = str(value)
-    if value.lstrip(' \t\r\n').startswith(('=', '+', '-', '@')) or value.startswith(('\t', '\r', '\n')):
+    if value.lstrip(' \t\r
+').startswith(('=', '+', '-', '@')) or value.startswith(('\t', '\r', '
+')):
         return "'" + value
     return value
 
 
 def render_csv(columns, records):
     buffer = io.StringIO(newline='')
-    writer = csv.writer(buffer, delimiter=';', lineterminator='\r\n')
+    writer = csv.writer(buffer, delimiter=';', lineterminator='\r
+')
     writer.writerow(columns)
     for record in records:
         writer.writerow([safe_cell(record.get(column)) for column in columns])
     return '\ufeff' + buffer.getvalue()
 
 
-def export_alerts(language, *, search="", platform="", severity="all", state="all",\n                  date_from="", date_to="", new_only=False):
+def export_alerts(language, *, search="", platform="", severity="all", state="all",
+                  date_from="", date_to="", new_only=False):
     report = latest_alerts(language)
-    filtered = filter_alerts(report['alerts'], search=search, platform=platform, severity=severity,\n                             state=state, date_from=date_from, date_to=date_to,\n                             new_only=new_only, checked_at=report['checked_at'])\n    rows = [dict(item, language=language, checked_at=report['checked_at']) for item in filtered]
+    filtered = filter_alerts(report['alerts'], search=search, platform=platform, severity=severity,
+                             state=state, date_from=date_from, date_to=date_to,
+                             new_only=new_only, checked_at=report['checked_at'])
+    rows = [dict(item, language=language, checked_at=report['checked_at']) for item in filtered]
     return render_csv(ALERT_COLUMNS, rows)
 
 
