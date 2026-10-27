@@ -270,12 +270,22 @@ async def admin_live_check_schedule(request: Request):
 
 
 @router.get("/live-check/alerts")
-async def admin_live_check_alerts(request: Request, language: str = "DE", search: str = "",\n                                  platform: str = "", severity: str = "all", state: str = "all",\n                                  date_from: str = "", date_to: str = "", new_only: bool = False):
+async def admin_live_check_alerts(request: Request, language: str = "DE", search: str = "",
+                                  platform: str = "", severity: str = "all", state: str = "all",
+                                  date_from: str = "", date_to: str = "", new_only: bool = False):
     _require(request)
     if language not in ("DE", "FR", "IT", "RM"):
         raise HTTPException(422, "Invalid language")
     from .social_alerts import latest_alerts
-    return latest_alerts(language)
+    from .social_alert_filters import filter_alerts
+    report = latest_alerts(language)
+    try:
+        filtered = filter_alerts(report["alerts"], search=search, platform=platform,
+                                 severity=severity, state=state, date_from=date_from,
+                                 date_to=date_to, new_only=new_only, checked_at=report["checked_at"])
+    except ValueError:
+        raise HTTPException(422, "Invalid alert filters")
+    return {**report, "alerts": filtered, "filtered_count": len(filtered)}
 
 
 @router.post("/live-check/alerts/triage")
@@ -325,12 +335,15 @@ async def admin_alert_metrics(request: Request, language: str = "DE", limit: int
 
 
 @router.get("/live-check/alerts/export.csv")
-async def admin_alerts_csv(request: Request, language: str = "DE", search: str = "",\n                           platform: str = "", severity: str = "all", state: str = "all",\n                           date_from: str = "", date_to: str = "", new_only: bool = False):
+async def admin_alerts_csv(request: Request, language: str = "DE", search: str = "",
+                           platform: str = "", severity: str = "all", state: str = "all",
+                           date_from: str = "", date_to: str = "", new_only: bool = False):
     _require(request)
     from fastapi.responses import Response
     from .social_csv_export import export_alerts
     try:
-        content = export_alerts(language, search=search, platform=platform, severity=severity,\n                                state=state, date_from=date_from, date_to=date_to, new_only=new_only)
+        content = export_alerts(language, search=search, platform=platform, severity=severity,
+                                state=state, date_from=date_from, date_to=date_to, new_only=new_only)
     except ValueError:
         raise HTTPException(422, "Invalid export language")
     return Response(content, media_type="text/csv; charset=utf-8",
@@ -349,4 +362,36 @@ async def admin_metrics_csv(request: Request, language: str = "DE", limit: int =
         raise HTTPException(422, "Invalid export query")
     return Response(content, media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": f'attachment; filename="social-trends-{language}.csv"',
+                             "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+
+
+@router.get("/live-check/archive")
+async def admin_alert_archive(request: Request, language: str = "DE", limit: int = 30,
+                              search: str = "", platform: str = "", severity: str = "all",
+                              date_from: str = "", date_to: str = "", new_only: bool = False):
+    _require(request)
+    from .social_alert_archive import archived_alerts
+    try:
+        return archived_alerts(language, limit=limit, search=search, platform=platform,
+                               severity=severity, date_from=date_from, date_to=date_to,
+                               new_only=new_only)
+    except ValueError:
+        raise HTTPException(422, "Invalid archive query")
+
+
+@router.get("/live-check/archive/export.csv")
+async def admin_alert_archive_csv(request: Request, language: str = "DE", limit: int = 30,
+                                  search: str = "", platform: str = "", severity: str = "all",
+                                  date_from: str = "", date_to: str = "", new_only: bool = False):
+    _require(request)
+    from fastapi.responses import Response
+    from .social_csv_export import export_archive
+    try:
+        content = export_archive(language, limit=limit, search=search, platform=platform,
+                                 severity=severity, date_from=date_from, date_to=date_to,
+                                 new_only=new_only)
+    except ValueError:
+        raise HTTPException(422, "Invalid archive query")
+    return Response(content, media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="social-archive-{language}.csv"',
                              "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})

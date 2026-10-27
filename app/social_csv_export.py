@@ -9,6 +9,8 @@ ALERT_COLUMNS = ('language', 'checked_at', 'person_number', 'platform', 'url',
                  'status', 'http_status', 'severity', 'new_problem', 'previous_status',
                  'review_state', 'review_reason', 'review_updated_at')
 TREND_COLUMNS = ('language', 'checked_at', 'checked', 'flagged', 'high', 'medium', 'low')
+ARCHIVE_COLUMNS = ('language', 'run_id', 'checked_at', 'person_number', 'platform',
+                   'url', 'status', 'http_status', 'severity', 'new_problem', 'previous_status')
 
 
 def safe_cell(value):
@@ -32,9 +34,13 @@ def render_csv(columns, records):
     return '\ufeff' + buffer.getvalue()
 
 
-def export_alerts(language, *, search="", platform="", severity="all", state="all",\n                  date_from="", date_to="", new_only=False):
+def export_alerts(language, *, search="", platform="", severity="all", state="all",
+                  date_from="", date_to="", new_only=False):
     report = latest_alerts(language)
-    filtered = filter_alerts(report['alerts'], search=search, platform=platform, severity=severity,\n                             state=state, date_from=date_from, date_to=date_to,\n                             new_only=new_only, checked_at=report['checked_at'])\n    rows = [dict(item, language=language, checked_at=report['checked_at']) for item in filtered]
+    filtered = filter_alerts(report['alerts'], search=search, platform=platform, severity=severity,
+                             state=state, date_from=date_from, date_to=date_to,
+                             new_only=new_only, checked_at=report['checked_at'])
+    rows = [dict(item, language=language, checked_at=report['checked_at']) for item in filtered]
     return render_csv(ALERT_COLUMNS, rows)
 
 
@@ -42,3 +48,13 @@ def export_trends(language, limit=10):
     metrics = alert_metrics(language, limit)
     rows = [dict(item, language=language) for item in metrics['trend']]
     return render_csv(TREND_COLUMNS, rows)
+
+
+def export_archive(language, *, limit=30, search='', platform='', severity='all',
+                   date_from='', date_to='', new_only=False):
+    from .social_alert_archive import archived_alerts
+    archive = archived_alerts(language, limit=limit, search=search, platform=platform,
+                              severity=severity, date_from=date_from, date_to=date_to,
+                              new_only=new_only)
+    return render_csv(ARCHIVE_COLUMNS,
+                      [dict(item, language=language) for item in archive['alerts']])
