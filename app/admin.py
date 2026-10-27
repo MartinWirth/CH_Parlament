@@ -446,3 +446,20 @@ async def admin_data_health_trends(request: Request, language: str = "DE", limit
         return quality_trends(language, limit=limit)
     except ValueError:
         raise HTTPException(422, "Invalid quality trend query")
+
+
+@router.get("/data-health/regressions")
+async def admin_data_health_regressions(
+    request: Request, language: str = "DE", limit: int = 10,
+    reachability_drop: int = 10, flagged_rise: int = 10,
+    duplicate_increase: int = 1, invalid_increase: int = 1,
+):
+    _require(request)
+    from .social_quality_regressions import quality_regressions
+    try:
+        return quality_regressions(
+            language, limit=limit, reachability_drop=reachability_drop,
+            flagged_rise=flagged_rise, duplicate_increase=duplicate_increase,
+            invalid_increase=invalid_increase)
+    except ValueError:
+        raise HTTPException(422, "Invalid regression query")
