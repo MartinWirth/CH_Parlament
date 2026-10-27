@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CH_Parlament – Administration</title>
+<style>
+body{font:16px system-ui,sans-serif;max-width:680px;margin:3rem auto;padding:0 1rem;color:#1c2530}
+section{border:1px solid #cbd5e1;border-radius:12px;padding:1.5rem;margin:1rem 0}
+label{display:block;margin:.8rem 0}button,input,select{font:inherit;padding:.5rem}
+button{cursor:pointer}button:disabled{cursor:wait;opacity:.6}
+#message{min-height:1.5rem}#status{white-space:pre-wrap;background:#f1f5f9;padding:1rem;border-radius:8px}
+</style>
+</head>
+<body>
+<h1>CH_Parlament – Administration</h1>
+<p>Social-Media-Profile sicher serverseitig aktualisieren. Das Passwort wird nicht gespeichert; die Anmeldung verwendet ein HttpOnly-Session-Cookie.</p>
+<section id="login-panel">
+<h2>Anmeldung</h2>
+<form id="login-form">
+<label>Admin-Passwort <input id="password" type="password" required autocomplete="current-password"></label>
+<button type="submit">Anmelden</button>
+</form>
+</section>
+<section id="dashboard" hidden>
+<h2>Profilaktualisierung</h2>
+<label>Sprache <select id="language"><option>DE</option><option>FR</option><option>IT</option><option>RM</option></select></label>
+<label><input type="checkbox" id="force"> Aktualisierung erzwingen</label>
+<button id="refresh" type="button">Aktualisieren</button>
+<button id="logout" type="button">Abmelden</button>
+<h3>Status</h3>
+<div id="status" role="status" aria-live="polite">Noch keine Aktualisierung.</div>
+</section>
+<p id="message" role="alert"></p>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const headers={"Content-Type":"application/json","X-Admin-Action":"1"};
+let poll=null;
+async function request(path,options={}){
+  const response=await fetch("/admin/"+path,{credentials:"same-origin",cache:"no-store",...options});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok)throw Error(data.detail||"HTTP "+response.status);
+  return data;
+}
+function showLogin(){ $("login-panel").hidden=false;$("dashboard").hidden=true;clearInterval(poll);poll=null; }
+function showDashboard(){ $("login-panel").hidden=true;$("dashboard").hidden=false;if(!poll)poll=setInterval(loadStatus,2500);loadStatus(); }
+async function loadStatus(){
+  try{
+    const data=await request("status");
+    $("status").textContent="Status: "+data.state+"\nStart: "+(data.started_at||"–")+"\nEnde: "+(data.finished_at||"–")+"\n"+(data.error||"");
+    $("refresh").disabled=data.state==="running";
+  }catch(err){if(err.message.includes("login"))showLogin();else $("message").textContent=err.message;}
+}
+$("login-form").addEventListener("submit",async event=>{
+  event.preventDefault();$("message").textContent="";
+  try{await request("login",{method:"POST",headers,body:JSON.stringify({password:$("password").value})});$("password").value="";showDashboard();}
+  catch(err){$("message").textContent=err.message;}
+});
+$("refresh").addEventListener("click",async()=>{
+  $("message").textContent="";$("refresh").disabled=true;
+  try{await request("refresh",{method:"POST",headers,body:JSON.stringify({language:$("language").value,force:$("force").checked})});await loadStatus();}
+  catch(err){$("message").textContent=err.message;$("refresh").disabled=false;}
+});
+$("logout").addEventListener("click",async()=>{
+  try{await request("logout",{method:"POST",headers});}catch(err){$("message").textContent=err.message;}
+  showLogin();
+});
+loadStatus();
+</script>
+</body>
+</html>
