@@ -33,7 +33,7 @@ button{cursor:pointer}button:disabled{cursor:wait;opacity:.6}
 <h2>Social-Media-Kandidaten prüfen</h2>
 <p>Links aus Parteiseiten und externen Quellen sind bis zur manuellen Freigabe unbestätigt.</p>
 <label>Suche <input id="review-search" type="search" placeholder="Mitglied, Plattform, URL"></label><label>Status <select id="review-status"><option value="all">Alle</option><option value="pending">Ungeprüft</option><option value="approved">Bestätigt</option><option value="rejected">Verworfen</option></select></label><label>Plattform <select id="review-platform"><option value="all">Alle</option></select></label><label>Sortieren <select id="review-sort"><option value="member">Mitglied</option><option value="platform">Plattform</option><option value="status">Status</option></select></label><button id="review-load" type="button">Kandidaten laden</button><p id="review-stats" role="status"></p><p id="review-count"></p>
-<div id="review-list" aria-live="polite"></div><h2>Link-Qualitätsprüfung</h2><p>Ungültige oder mehrfach zugeordnete Profile werden nur markiert, nicht gelöscht.</p><button id="quality-load" type="button">Links prüfen</button><p id="quality-summary" role="status"></p><div id="quality-issues"></div><h3>Online-Erreichbarkeit</h3><p>Prüft maximal 100 unterschiedliche Links pro Lauf. Social-Media-Plattformen können automatisierte Zugriffe blockieren.</p><button id="live-check" type="button">Erreichbarkeit prüfen</button><p id="live-status" role="status"></p><div id="live-results"></div><h3>Prüfverlauf und Veränderungen</h3><button id="history-load" type="button">Prüfverlauf laden</button><p id="history-summary" role="status"></p><div id="history-results"></div>
+<div id="review-list" aria-live="polite"></div><h2>Link-Qualitätsprüfung</h2><p>Ungültige oder mehrfach zugeordnete Profile werden nur markiert, nicht gelöscht.</p><button id="quality-load" type="button">Links prüfen</button><p id="quality-summary" role="status"></p><div id="quality-issues"></div><h3>Online-Erreichbarkeit</h3><p>Prüft maximal 100 unterschiedliche Links pro Lauf. Social-Media-Plattformen können automatisierte Zugriffe blockieren.</p><button id="live-check" type="button">Erreichbarkeit prüfen</button><p id="live-status" role="status"></p><div id="live-results"></div><h3>Automatische Prüfung</h3><p id="schedule-status" role="status"></p><h3>Prüfverlauf und Veränderungen</h3><button id="history-load" type="button">Prüfverlauf laden</button><p id="history-summary" role="status"></p><div id="history-results"></div>
 </section>
 <p id="message" role="alert"></p>
 <script>
@@ -118,6 +118,14 @@ $("live-check").addEventListener("click",async()=>{
     if(!livePoll)livePoll=setInterval(loadLiveCheck,2500);
   }catch(err){$("live-check").disabled=false;$("message").textContent=err.message;}
 });
+async function loadSchedule(){
+  try{
+    const data=await request("live-check/schedule");
+    $("schedule-status").textContent=data.enabled?
+      "Aktiv · alle "+data.interval_hours+" Stunden · Sprachen: "+data.languages.join(", "):
+      "Deaktiviert · Konfiguration über SOCIAL_CHECK_INTERVAL_HOURS";
+  }catch(err){$("schedule-status").textContent="Zeitplan nicht verfügbar";}
+}
 async function loadCheckHistory(){
   const container=$("history-results");container.replaceChildren();
   try{
@@ -147,7 +155,7 @@ async function loadCheckHistory(){
   }catch(err){$("history-summary").textContent="Prüfverlauf konnte nicht geladen werden";$("message").textContent=err.message;}
 }
 $("history-load").addEventListener("click",loadCheckHistory);
-loadStatus();
+loadStatus();loadSchedule();
 </script>
 </body>
 </html>

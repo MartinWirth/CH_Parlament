@@ -102,3 +102,14 @@ def get_history(language, limit=10):
             "comparison_available": previous is not None,
         })
     return summaries
+
+
+def latest_check_time(language):
+    """Last successful persisted check, or None."""
+    if language not in LANGUAGES:
+        raise ValueError("Invalid language")
+    with _connect() as connection:
+        row = connection.execute(
+            "SELECT checked_at FROM checks WHERE language=? ORDER BY id DESC LIMIT 1",
+            (language,)).fetchone()
+    return row[0] if row else None

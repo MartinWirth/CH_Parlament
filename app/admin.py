@@ -233,7 +233,7 @@ async def admin_start_live_check(request: Request):
     data = await request.json()
     if not isinstance(data, dict) or set(data) != {"language"} or data["language"] not in ("DE", "FR", "IT", "RM"):
         raise HTTPException(422, "Invalid language")
-    if _live_task is not None and not _live_task.done():
+    if (_live_task is not None and not _live_task.done()) or _live_job.get("state") == "running":
         raise HTTPException(409, "Link check already running")
     _live_job.clear()
     _live_job.update(state="running", language=data["language"], checked=0, results=[])
@@ -254,3 +254,16 @@ async def admin_live_check_history(request: Request, language: str = "DE"):
         raise HTTPException(422, "Invalid language")
     from .social_check_history import get_history
     return {"language": language, "runs": get_history(language, limit=10)}
+
+
+@router.get("/live-check/schedule")
+async def admin_live_check_schedule(request: Request):
+    _require(request)
+    from .social_check_scheduler import interval_hours
+    from .social_check_history import latest_check_time
+    hours = interval_hours()
+    languages = [v.strip().upper() for v in os.getenv("SOCIAL_CHECK_LANGUAGES", "DE").split(",")]
+    return {"enabled": bool(hours), "interval_hours": hours,
+            "languages": languages if hours else [],
+            "last_checks": {lang: latest_check_time(lang) for lang in languages
+                            if hours and lang in ("DE", "FR", "IT", "RM")}}
