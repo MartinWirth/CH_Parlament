@@ -50,6 +50,7 @@ def test_validation_and_empty(monkeypatch, tmp_path):
 def test_authenticated_endpoint(monkeypatch, tmp_path):
     monkeypatch.setenv('SOCIAL_CHECK_HISTORY_PATH', str(tmp_path / 'history.sqlite3'))
     monkeypatch.setenv('ADMIN_REFRESH_PASSWORD', 'secret')
+    monkeypatch.setenv('SOCIAL_REFRESH_TOKEN', 'token')
     admin._sessions.clear()
     async def run():
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
