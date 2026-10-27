@@ -46,7 +46,9 @@ def test_legacy_ambiguous_requires_explicit_identity(monkeypatch, tmp_path):
     assert rows[('42', 'Facebook', A)]['state'] == 'in_progress'
     assert ('42', 'Facebook', B) not in rows
     assert len(events('DE', '42', 'Facebook', A)) == 1
-    assert events('DE', '42', 'Facebook', OLD)[0]['source'] == 'manual'
+    with _connect() as db:
+        legacy_events = db.execute("SELECT source FROM alert_triage_events WHERE canonical_url=?", (OLD,)).fetchall()
+    assert legacy_events == [('manual',)]
     with pytest.raises(ValueError):
         resolve_legacy('DE', '42', 'Facebook', OLD, A, 'resolved', 'Again')
 
