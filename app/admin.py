@@ -215,6 +215,10 @@ async def _execute_live_check(language):
         apply_decisions(snapshot, language)
         profiles = snapshot.get(language, {}).get("profiles", {})
         report = await check_links(profiles, verified_social_url)
+        from .social_quality import audit_profiles
+        quality = audit_profiles(profiles, verified_social_url)
+        report["quality_snapshot"] = {"checked": quality["checked"],
+            "invalid": quality["invalid"], "duplicates": quality["duplicates"]}
         from .social_check_history import save_report
         save_report(language, report)
         _live_job.update(state="completed", **report)
@@ -432,3 +436,13 @@ async def admin_data_health(request: Request, language: str = "DE", stale_hours:
         return data_health(language, stale_hours=stale_hours)
     except ValueError:
         raise HTTPException(422, "Invalid data health query")
+
+
+@router.get("/data-health/trends")
+async def admin_data_health_trends(request: Request, language: str = "DE", limit: int = 10):
+    _require(request)
+    from .social_quality_trends import quality_trends
+    try:
+        return quality_trends(language, limit=limit)
+    except ValueError:
+        raise HTTPException(422, "Invalid quality trend query")
