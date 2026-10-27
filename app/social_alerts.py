@@ -1,5 +1,7 @@
 """Read-only prioritized alerts from the latest persisted link checks."""
 from .social_check_history import _connect, LANGUAGES, compare_reports
+from .social_alert_triage import decisions
+from .social_quality import canonical_url
 import json
 
 
@@ -25,6 +27,7 @@ def latest_alerts(language):
     previous = json.loads(rows[1][1]) if len(rows) > 1 else None
     changes = compare_reports(previous, current) if previous else []
     changed = {(v['person_number'], v['platform'], v['url']): v for v in changes}
+    triage = decisions(language)
     alerts = []
     for item in current.get('results', []):
         level = severity(item)
@@ -34,7 +37,10 @@ def latest_alerts(language):
         change = changed.get(key)
         # A first observation is unconfirmed, not a newly broken profile.
         is_new = bool(change and change.get('previous_status') == 'reachable')
-        alerts.append({'person_number': item.get('person_number'), 'platform': item.get('platform'),
+        review = triage.get((item.get('person_number'), item.get('platform'), canonical_url(item.get('url'))), {})
+        alerts.append({'review_state': review.get('state', 'open'), 'review_reason': review.get('reason', ''),
+                       'review_updated_at': review.get('updated_at'),
+                       'person_number': item.get('person_number'), 'platform': item.get('platform'),
                        'url': item.get('url'), 'status': item.get('status'),
                        'http_status': item.get('http_status'), 'severity': level,
                        'new_problem': is_new, 'previous_status': change.get('previous_status') if change else None})
