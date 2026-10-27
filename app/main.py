@@ -16,6 +16,7 @@ import xml.etree.ElementTree as ET
 from urllib.parse import urlparse, urlunparse
 import httpx
 from .public_https import PublicHTTPSClient
+from .social_evidence import evidence_for_sources, load_review_candidates
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -1547,7 +1548,7 @@ def save_profile_snapshot(snapshot):
 async def social_profiles_cached(language: str = Query("DE", pattern="^(DE|FR|IT|RM)$")):
     """Return the last saved profiles without network requests."""
     snapshot = read_profile_snapshot().get(language, {})
-    return {"profiles": snapshot.get("profiles", {}), "profiles_by_source": snapshot.get("profiles_by_source", {}), "updated_at": snapshot.get("updated_at"), "cached": True, "debug": snapshot.get("debug", {})}
+    return {"profiles": snapshot.get("profiles", {}), "profiles_by_source": snapshot.get("profiles_by_source", {}), "profile_evidence": snapshot.get("profile_evidence", {}), "review_candidates": snapshot.get("review_candidates", {}), "updated_at": snapshot.get("updated_at"), "cached": True, "debug": snapshot.get("debug", {})}
 
 _refresh_lock = asyncio.Lock()
 
@@ -1685,6 +1686,16 @@ async def _run_social_profiles_refresh(language, force):
         }
         if any(sources.values()):
             by_source[number] = sources
+    member_names = {str(pick(row, "PersonNumber")): normalize(row)["name"]
+                    for row in rows if is_current(row)}
+    profile_evidence = evidence_for_sources(by_source, current_homepages, now.isoformat())
+    review_candidates, review_diagnostic = load_review_candidates(
+        member_names, verified_social_url,
+        path=os.getenv("SOCIAL_REVIEW_CANDIDATES_PATH",
+                       str(ROOT.parent / "social_review_candidates.json")),
+        checked_at=now.isoformat())
+    # Candidates are separate from profiles: never promote a search result to
+    # a verified personal account without independent identity confirmation.
     member_homepages = {str(row.get("PersonNumber")) for row in communications if str(row.get("CommunicationTypeText", "")).lower() in ("homepage", "page d'accueil", "sito internet") and homepage_url(row.get("Address"))}
     missing = {
         "members_total": len(ids),
@@ -1704,7 +1715,7 @@ async def _run_social_profiles_refresh(language, force):
         if number not in reusable_homepages})
     data = {"homepage_checked_at": homepage_checked_next,
             "homepage_urls": current_homepages,
-            "party_checked_at": checked_next, "profiles": profiles, "profiles_by_source": by_source, "updated_at": datetime.now(timezone.utc).isoformat(), "cached": False, "debug": {"party_sources": party_diagnostic, "party_refresh_force": force, "party_refresh_reused": len(fresh_party), "homepage_refresh_force": force, "homepage_refresh_reused": len(reusable_homepages), "homepage_refresh_scanned": scanned_homepages, "homepage_refresh_ttl_hours": ttl_hours, "party_members_added": party_added, "previous_links_retained": retained, "coverage": missing, "platforms": platforms, "homepages_checked": homepages, "homepage_diagnostics": homepage_report, "homepage_profiles": len(profiles), "communication_count": len(communications), "communication_error": diagnostic.get("error")}}
+            "party_checked_at": checked_next, "profiles": profiles, "profiles_by_source": by_source, "profile_evidence": profile_evidence, "review_candidates": review_candidates, "updated_at": datetime.now(timezone.utc).isoformat(), "cached": False, "debug": {"review_candidates": review_diagnostic, "party_sources": party_diagnostic, "party_refresh_force": force, "party_refresh_reused": len(fresh_party), "homepage_refresh_force": force, "homepage_refresh_reused": len(reusable_homepages), "homepage_refresh_scanned": scanned_homepages, "homepage_refresh_ttl_hours": ttl_hours, "party_members_added": party_added, "previous_links_retained": retained, "coverage": missing, "platforms": platforms, "homepages_checked": homepages, "homepage_diagnostics": homepage_report, "homepage_profiles": len(profiles), "communication_count": len(communications), "communication_error": diagnostic.get("error")}}
     phase_ms["merge_and_coverage"] = round((time.monotonic() - phase_started) * 1000, 1)
     phase_started = time.monotonic()
     cache_after = http_cache_diagnostics()
