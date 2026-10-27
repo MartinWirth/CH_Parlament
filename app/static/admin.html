@@ -396,6 +396,38 @@ async function loadQualityTrends(){
 $("quality-trend-load").addEventListener("click",loadQualityTrends);
 $("quality-trend-limit").addEventListener("change",loadQualityTrends);
 $("language").addEventListener("change",loadQualityTrends);
+async function loadRegressions(){
+  const out=$("regression-results");out.replaceChildren();
+  try{
+    const params=new URLSearchParams({
+      language:$("language").value,limit:$("quality-trend-limit").value,
+      reachability_drop:$("regression-reach").value,
+      flagged_rise:$("regression-flagged").value,
+      duplicate_increase:$("regression-duplicates").value,
+      invalid_increase:$("regression-invalid").value
+    });
+    const data=await request("data-health/regressions?"+params);
+    const summary=document.createElement("p");
+    summary.textContent=data.runs+" Prüfläufe · "+data.warnings.length+
+      " Verschlechterungen · "+data.latest_warnings.length+" im letzten Prüflauf";
+    out.append(summary);
+    const names={reachability_drop:"Erreichbarkeit gesunken",flagged_rise:"Auffälligkeiten gestiegen",
+      duplicate_increase:"Duplikate gestiegen",invalid_increase:"Ungültige Links gestiegen"};
+    for(const item of data.warnings){
+      const row=document.createElement("p");
+      row.textContent=item.checked_at+" · "+names[item.code]+": "+item.previous+
+        " → "+item.current+" (Änderung: "+item.delta+")"+
+        (item.sample_changed?" · Unterschiedliche Anzahl geprüfter Links":"")+
+        (item.truncated?" · Mindestens ein Prüflauf war begrenzt":"");
+      out.append(row);
+    }
+    if(!data.warnings.length){
+      const p=document.createElement("p");p.textContent="Keine Verschlechterung über den Schwellenwerten erkannt.";out.append(p);
+    }
+  }catch(err){out.textContent="Qualitätsvergleich fehlgeschlagen: "+err.message;}
+}
+$("regression-load").addEventListener("click",loadRegressions);
+$("language").addEventListener("change",loadRegressions);
 function archiveParams(){
   return new URLSearchParams({language:$("language").value,limit:$("archive-limit").value,
     search:$("archive-search").value,platform:$("archive-platform").value,
