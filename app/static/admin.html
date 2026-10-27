@@ -428,6 +428,26 @@ async function loadRegressions(){
 }
 $("regression-load").addEventListener("click",loadRegressions);
 $("language").addEventListener("change",loadRegressions);
+async function loadDiscoveryWorklist(){
+  const container=$("discovery-results");container.replaceChildren();
+  try{
+    const params=new URLSearchParams({language:$("language").value,
+      platform:$("discovery-platform").value,limit:"100"});
+    const data=await request("social-discovery/worklist?"+params);
+    $("discovery-summary").textContent=data.total+" fehlende Profile zur Recherche · "+
+      data.items.length+" angezeigt. Treffer vor Freigabe persönlich prüfen.";
+    for(const item of data.items){
+      const row=document.createElement("p"),link=document.createElement("a");
+      link.href=item.search_url;link.target="_blank";link.rel="noopener noreferrer";
+      link.textContent=item.name+" · "+item.platform+" · Websuche öffnen";
+      row.append(link);container.append(row);
+    }
+    if(!data.items.length)container.textContent="Keine Rechercheaufträge vorhanden. Falls noch keine Mitgliederdaten gespeichert sind, zuerst Profile aktualisieren.";
+  }catch(err){$("discovery-summary").textContent="Rechercheaufträge konnten nicht geladen werden: "+err.message;}
+}
+$("discovery-load").addEventListener("click",loadDiscoveryWorklist);
+$("discovery-platform").addEventListener("change",loadDiscoveryWorklist);
+$("language").addEventListener("change",loadDiscoveryWorklist);
 function archiveParams(){
   return new URLSearchParams({language:$("language").value,limit:$("archive-limit").value,
     search:$("archive-search").value,platform:$("archive-platform").value,
