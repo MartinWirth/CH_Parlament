@@ -51,3 +51,16 @@ def test_rejected_candidate_is_not_promoted(monkeypatch, tmp_path):
     decide(snapshot, "DE", "42", "https://x.com/unverified", "rejected")
     assert snapshot["DE"]["profiles"] == {}
     assert snapshot["DE"]["review_candidates"]["42"][0]["review_status"] == "rejected"
+
+
+def test_rejection_revokes_prior_admin_approval(monkeypatch, tmp_path):
+    from app.social_review import decide
+    monkeypatch.setenv("SOCIAL_REVIEW_DECISIONS_PATH", str(tmp_path / "decisions.json"))
+    url = "https://instagram.com/ada_example"
+    snapshot = {"DE": {"review_candidates": {"42": [{
+        "url": url, "platform": "Instagram", "source_url": "https://party.example.org/ada"}]},
+        "profiles": {}, "profiles_by_source": {}}}
+    decide(snapshot, "DE", "42", url, "approved")
+    assert snapshot["DE"]["profiles"]["42"]["Instagram"] == url
+    decide(snapshot, "DE", "42", url, "rejected")
+    assert "42" not in snapshot["DE"]["profiles"]
