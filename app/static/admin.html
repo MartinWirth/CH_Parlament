@@ -157,7 +157,24 @@ function renderAlerts(){
         await loadAlerts();
       }catch(err){$("message").textContent=err.message;save.disabled=false;}
     });
-    const line=document.createElement("div");line.append(p,state,reason,save);container.append(line);
+    const history=document.createElement("button");history.type="button";history.textContent="Verlauf";
+    const historyOutput=document.createElement("div");
+    history.addEventListener("click",async()=>{
+      try{
+        const params=new URLSearchParams({language:$("language").value,person_number:item.person_number,
+          platform:item.platform,url:item.url});
+        const data=await request("live-check/alerts/events?"+params);
+        historyOutput.replaceChildren();
+        for(const entry of data.events){
+          const row=document.createElement("p");
+          row.textContent=entry.updated_at+" · "+entry.source+" · "+
+            (entry.old_state||"–")+" → "+entry.new_state+" · "+entry.reason;
+          historyOutput.append(row);
+        }
+        if(!data.events.length)historyOutput.textContent="Noch keine Bearbeitungsschritte.";
+      }catch(err){$("message").textContent=err.message;}
+    });
+    const line=document.createElement("div");line.append(p,state,reason,save,history,historyOutput);container.append(line);
   }
   if(!filtered.length)container.textContent="Keine Warnmeldungen für diesen Filter.";
 }
