@@ -33,7 +33,7 @@ button{cursor:pointer}button:disabled{cursor:wait;opacity:.6}
 <h2>Social-Media-Kandidaten prüfen</h2>
 <p>Links aus Parteiseiten und externen Quellen sind bis zur manuellen Freigabe unbestätigt.</p>
 <label>Suche <input id="review-search" type="search" placeholder="Mitglied, Plattform, URL"></label><label>Status <select id="review-status"><option value="all">Alle</option><option value="pending">Ungeprüft</option><option value="approved">Bestätigt</option><option value="rejected">Verworfen</option></select></label><label>Plattform <select id="review-platform"><option value="all">Alle</option></select></label><label>Sortieren <select id="review-sort"><option value="member">Mitglied</option><option value="platform">Plattform</option><option value="status">Status</option></select></label><button id="review-load" type="button">Kandidaten laden</button><p id="review-stats" role="status"></p><p id="review-count"></p>
-<div id="review-list" aria-live="polite"></div>
+<div id="review-list" aria-live="polite"></div><h2>Link-Qualitätsprüfung</h2><p>Ungültige oder mehrfach zugeordnete Profile werden nur markiert, nicht gelöscht.</p><button id="quality-load" type="button">Links prüfen</button><p id="quality-summary" role="status"></p><div id="quality-issues"></div>
 </section>
 <p id="message" role="alert"></p>
 <script>
@@ -73,6 +73,23 @@ $("logout").addEventListener("click",async()=>{
 </script>
 <script src="/admin/review-ui.js"></script>
 <script>
+$("quality-load").addEventListener("click",async()=>{
+  $("quality-summary").textContent="Prüfung läuft…";
+  const container=$("quality-issues");container.replaceChildren();
+  try{
+    const data=await request("quality?language="+encodeURIComponent($("language").value));
+    $("quality-summary").textContent=data.checked+" Links geprüft · "+data.invalid+
+      " ungültig · "+data.duplicates+" doppelt zugeordnet";
+    for(const issue of data.issues){
+      const p=document.createElement("p");
+      p.textContent="Mitglied "+issue.person_number+" · "+issue.platform+" · "+
+        issue.type+" · "+issue.url+
+        (issue.other_person_numbers?.length?" · Weitere: "+issue.other_person_numbers.join(", "):"");
+      container.append(p);
+    }
+    if(!data.issues.length)container.textContent="Keine strukturellen Probleme erkannt.";
+  }catch(err){$("quality-summary").textContent="Prüfung fehlgeschlagen";$("message").textContent=err.message;}
+});
 loadStatus();
 </script>
 </body>
