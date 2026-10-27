@@ -23,7 +23,7 @@ button{cursor:pointer}button:disabled{cursor:wait;opacity:.6}
 </form>
 </section>
 <section id="dashboard" hidden>
-<h2>Datenqualität und Systemzustand</h2><p>Übersicht für die gewählte Sprache. Die Erreichbarkeitsprüfung kann auf 100 Links begrenzt sein.</p><label>Warnschwelle letzte Prüfung <select id="health-threshold"><option value="24">24 Stunden</option><option value="48" selected>48 Stunden</option><option value="168">7 Tage</option></select></label><button id="health-load" type="button">Systemzustand laden</button><div id="health-cards" class="metric-grid" role="status"></div><p id="health-check"></p><div id="health-warnings" role="status"></div><h2>Profilaktualisierung</h2>
+<h2>Datenqualität und Systemzustand</h2><p>Übersicht für die gewählte Sprache. Die Erreichbarkeitsprüfung kann auf 100 Links begrenzt sein.</p><label>Warnschwelle letzte Prüfung <select id="health-threshold"><option value="24">24 Stunden</option><option value="48" selected>48 Stunden</option><option value="168">7 Tage</option></select></label><button id="health-load" type="button">Systemzustand laden</button><div id="health-cards" class="metric-grid" role="status"></div><p id="health-check"></p><div id="health-warnings" role="status"></div><h3>Datenqualität im Zeitverlauf</h3><label>Prüfläufe <select id="quality-trend-limit"><option>5</option><option selected>10</option><option>20</option><option>30</option></select></label><button id="quality-trend-load" type="button">Qualitätstrend laden</button><svg id="quality-trend-chart" viewBox="0 0 760 280" role="img" aria-label="Anteil erreichbarer und auffälliger Links" style="width:100%;height:auto"></svg><div id="quality-trend-results" role="status"></div><h2>Profilaktualisierung</h2>
 <label>Sprache <select id="language"><option>DE</option><option>FR</option><option>IT</option><option>RM</option></select></label>
 <label><input type="checkbox" id="force"> Aktualisierung erzwingen</label>
 <button id="refresh" type="button">Aktualisieren</button>
@@ -346,6 +346,56 @@ async function loadDataHealth(){
 $("health-load").addEventListener("click",loadDataHealth);
 $("health-threshold").addEventListener("change",loadDataHealth);
 $("language").addEventListener("change",loadDataHealth);
+async function loadQualityTrends(){
+  const chart=$("quality-trend-chart"),out=$("quality-trend-results");
+  chart.replaceChildren();out.replaceChildren();
+  try{
+    const params=new URLSearchParams({language:$("language").value,limit:$("quality-trend-limit").value});
+    const data=await request("data-health/trends?"+params);
+    const ns="http://www.w3.org/2000/svg",points=data.trend;
+    const add=(tag,attrs,content)=>{
+      const el=document.createElementNS(ns,tag);
+      for(const [key,value] of Object.entries(attrs))el.setAttribute(key,String(value));
+      if(content!==undefined)el.textContent=content;
+      chart.append(el);return el;
+    };
+    if(!points.length){out.textContent="Noch keine Prüfläufe.";return;}
+    const x=i=>55+(points.length===1?325:i*650/(points.length-1)),y=v=>235-v*1.9;
+    add("line",{x1:55,y1:235,x2:720,y2:235,stroke:"#64748b"});
+    add("line",{x1:55,y1:45,x2:55,y2:235,stroke:"#64748b"});
+    add("text",{x:5,y:50,fill:"#334155"},"100 %");
+    add("text",{x:25,y:239,fill:"#334155"},"0 %");
+    for(const [field,color,label] of [["reachable_percent","#15803d","Erreichbar"],["flagged_percent","#dc2626","Auffällig"]]){
+      let coords=[];
+      const flush=()=>{
+        if(coords.length>1)add("polyline",{points:coords.join(" "),fill:"none",stroke:color,"stroke-width":3});
+        coords=[];
+      };
+      points.forEach((p,i)=>{
+        if(p[field]===null){flush();return;}
+        coords.push(x(i)+","+y(p[field]));
+        const dot=add("circle",{cx:x(i),cy:y(p[field]),r:4,fill:color});
+        const title=document.createElementNS(ns,"title");
+        title.textContent=p.checked_at+" · "+label+": "+p[field]+" %";dot.append(title);
+      });
+      flush();
+    }
+    add("text",{x:55,y:273,fill:"#15803d"},"Grün: erreichbar");
+    add("text",{x:270,y:273,fill:"#dc2626"},"Rot: auffällig");
+    for(const p of points){
+      const line=document.createElement("p");
+      line.textContent=p.checked_at+" · "+p.checked+" geprüft · erreichbar: "+
+        (p.reachable_percent===null?"–":p.reachable_percent+" %")+
+        " · Auffällig: "+p.flagged+" · ungültig: "+(p.invalid??"nicht erfasst")+
+        " · Duplikate: "+(p.duplicates??"nicht erfasst")+
+        (p.truncated?" · Prüflimit erreicht":"");
+      out.append(line);
+    }
+  }catch(err){out.textContent="Qualitätstrend konnte nicht geladen werden: "+err.message;}
+}
+$("quality-trend-load").addEventListener("click",loadQualityTrends);
+$("quality-trend-limit").addEventListener("change",loadQualityTrends);
+$("language").addEventListener("change",loadQualityTrends);
 function archiveParams(){
   return new URLSearchParams({language:$("language").value,limit:$("archive-limit").value,
     search:$("archive-search").value,platform:$("archive-platform").value,
