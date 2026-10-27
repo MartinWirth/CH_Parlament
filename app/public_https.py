@@ -31,15 +31,17 @@ class PublicOnlyResolver(aiohttp.abc.AbstractResolver):
 class PublicHTTPSClient:
     """Minimal httpx-compatible interface for the homepage scanner."""
 
-    def __init__(self, timeout=8, headers=None):
+    def __init__(self, timeout=8, headers=None, *, _resolver=None, _ssl_context=None):
         self.timeout = timeout
         self.headers = headers or {}
         self.session = None
+        self._resolver = _resolver
+        self._ssl_context = _ssl_context
 
     async def __aenter__(self):
         connector = aiohttp.TCPConnector(
-            resolver=PublicOnlyResolver(), use_dns_cache=False,
-            force_close=True, ssl=True)
+            resolver=self._resolver if self._resolver is not None else PublicOnlyResolver(), use_dns_cache=False,
+            force_close=True, ssl=self._ssl_context if self._ssl_context is not None else True)
         self.session = aiohttp.ClientSession(
             connector=connector, trust_env=False, headers=self.headers)
         return self
