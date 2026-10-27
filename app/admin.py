@@ -363,3 +363,35 @@ async def admin_metrics_csv(request: Request, language: str = "DE", limit: int =
     return Response(content, media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": f'attachment; filename="social-trends-{language}.csv"',
                              "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+
+
+@router.get("/live-check/archive")
+async def admin_alert_archive(request: Request, language: str = "DE", limit: int = 30,
+                              search: str = "", platform: str = "", severity: str = "all",
+                              date_from: str = "", date_to: str = "", new_only: bool = False):
+    _require(request)
+    from .social_alert_archive import archived_alerts
+    try:
+        return archived_alerts(language, limit=limit, search=search, platform=platform,
+                               severity=severity, date_from=date_from, date_to=date_to,
+                               new_only=new_only)
+    except ValueError:
+        raise HTTPException(422, "Invalid archive query")
+
+
+@router.get("/live-check/archive/export.csv")
+async def admin_alert_archive_csv(request: Request, language: str = "DE", limit: int = 30,
+                                  search: str = "", platform: str = "", severity: str = "all",
+                                  date_from: str = "", date_to: str = "", new_only: bool = False):
+    _require(request)
+    from fastapi.responses import Response
+    from .social_csv_export import export_archive
+    try:
+        content = export_archive(language, limit=limit, search=search, platform=platform,
+                                 severity=severity, date_from=date_from, date_to=date_to,
+                                 new_only=new_only)
+    except ValueError:
+        raise HTTPException(422, "Invalid archive query")
+    return Response(content, media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="social-archive-{language}.csv"',
+                             "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
