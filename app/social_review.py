@@ -48,6 +48,22 @@ def apply_decisions(snapshot, language, decisions=None):
                 continue
             candidate["review_status"] = state
             candidate["reviewed_at"] = record.get("reviewed_at")
+            if state == "rejected" and isinstance(platform, str):
+                sources = data.get("profiles_by_source", {}).get(number, {})
+                approved = sources.get("Admin-Freigabe", {})
+                if approved.get(platform) == url:
+                    approved.pop(platform, None)
+                    evidence = data.get("profile_evidence", {}).get(number, [])
+                    evidence[:] = [item for item in evidence if not (
+                        item.get("url") == url and item.get("source_type") == "Admin-Freigabe")]
+                    other = any(isinstance(links, dict) and links.get(platform) == url
+                                for key, links in sources.items() if key != "Admin-Freigabe")
+                    profiles = data.get("profiles", {}).get(number, {})
+                    if not other and profiles.get(platform) == url:
+                        profiles.pop(platform, None)
+                        if not profiles:
+                            data["profiles"].pop(number, None)
+                continue
             if state != "approved" or not isinstance(platform, str):
                 continue
             # Preserve previously verified profiles; never overwrite them.
