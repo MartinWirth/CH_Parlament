@@ -26,3 +26,7 @@ The admin session and refresh lock remain process-local; use one worker.
 ## Review dashboard filters
 
 The `/admin` review list now supports case-insensitive search across member number, platform, profile URL and source URL, filtering by pending/approved/rejected state and by platform, plus sorting by member, platform or status. Counts for all four statuses show the complete currently loaded language; the displayed count shows the filtered subset. All filtering happens locally in the browser, without changing review decisions. Refresh the list after a server refresh to see newly discovered candidates.
+
+## Qualitätsprüfung
+
+Unter `/admin` zeigt **Links prüfen** eine schreibgeschützte Prüfung der veröffentlichten Social-Media-Links an. Gemeldet werden ungültige URLs, Plattformabweichungen und identische Profil-URLs bei verschiedenen Mitgliedern. Die Prüfung erfolgt ohne Netzwerkzugriffe und löscht keine Profile. Sie kann deshalb nicht feststellen, ob ein Profil inzwischen offline ist oder zu einer bestimmten Person gehört.
