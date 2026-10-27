@@ -395,3 +395,30 @@ async def admin_alert_archive_csv(request: Request, language: str = "DE", limit:
     return Response(content, media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": f'attachment; filename="social-archive-{language}.csv"',
                              "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+
+
+@router.get("/live-check/facebook-legacy")
+async def admin_facebook_legacy(request: Request, language: str = "DE"):
+    _require(request)
+    from .social_legacy_triage import legacy_candidates
+    try:
+        return legacy_candidates(language)
+    except ValueError:
+        raise HTTPException(422, "Invalid language")
+
+
+@router.post("/live-check/facebook-legacy/review")
+async def admin_facebook_legacy_review(request: Request):
+    _require(request)
+    if not _same_origin(request):
+        raise HTTPException(403, "Same-origin request required")
+    data = await request.json()
+    expected = {"language", "person_number", "platform", "legacy_url",
+                "target_url", "state", "reason"}
+    if not isinstance(data, dict) or set(data) != expected:
+        raise HTTPException(422, "Invalid legacy review")
+    from .social_legacy_triage import resolve_legacy
+    try:
+        return resolve_legacy(**data)
+    except ValueError:
+        raise HTTPException(422, "Invalid legacy review or target conflict")
