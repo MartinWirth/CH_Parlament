@@ -3,6 +3,7 @@ import csv
 import io
 from .social_alerts import latest_alerts
 from .social_alert_metrics import alert_metrics
+from .social_alert_filters import filter_alerts
 
 ALERT_COLUMNS = ('language', 'checked_at', 'person_number', 'platform', 'url',
                  'status', 'http_status', 'severity', 'new_problem', 'previous_status',
@@ -31,9 +32,9 @@ def render_csv(columns, records):
     return '\ufeff' + buffer.getvalue()
 
 
-def export_alerts(language):
+def export_alerts(language, *, search="", platform="", severity="all", state="all",\n                  date_from="", date_to="", new_only=False):
     report = latest_alerts(language)
-    rows = [dict(item, language=language, checked_at=report['checked_at']) for item in report['alerts']]
+    filtered = filter_alerts(report['alerts'], search=search, platform=platform, severity=severity,\n                             state=state, date_from=date_from, date_to=date_to,\n                             new_only=new_only, checked_at=report['checked_at'])\n    rows = [dict(item, language=language, checked_at=report['checked_at']) for item in filtered]
     return render_csv(ALERT_COLUMNS, rows)
 
 
