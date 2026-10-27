@@ -13,7 +13,7 @@ from .main import ROOT, verified_social_url
 
 
 def update_snapshot(path=None):
-    target = Path(path or os.getenv("SOCIAL_PROFILE_SNAPSHOT_PATH",
+    target = Path(path or os.getenv("SOCIAL_SNAPSHOT_PATH",
                                    str(ROOT.parent / ".social_profiles_snapshot.json")))
     snapshot = json.loads(target.read_text(encoding="utf-8"))
     counts = {}
