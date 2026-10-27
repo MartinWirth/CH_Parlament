@@ -178,3 +178,9 @@ async def admin_review_decision(request: Request):
             raise HTTPException(404, "Candidate not found")
         save_profile_snapshot(snapshot)
     return {"ok": True, **record}
+
+
+@router.get("/review-ui.js")
+async def admin_review_script():
+    from fastapi.responses import FileResponse
+    return FileResponse(Path(__file__).resolve().parent / "static" / "admin-review.js", media_type="text/javascript")
