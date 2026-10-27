@@ -312,3 +312,13 @@ async def admin_alert_events(request: Request, language: str, person_number: str
         return {"events": events(language, person_number, platform, url)}
     except ValueError:
         raise HTTPException(422, "Invalid alert identity")
+
+
+@router.get("/live-check/metrics")
+async def admin_alert_metrics(request: Request, language: str = "DE", limit: int = 10):
+    _require(request)
+    from .social_alert_metrics import alert_metrics
+    try:
+        return alert_metrics(language, limit)
+    except ValueError:
+        raise HTTPException(422, "Invalid metrics query")
