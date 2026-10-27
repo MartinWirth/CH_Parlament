@@ -26,6 +26,8 @@ app = FastAPI(title="CH_Parlament")
 ROOT = Path(__file__).resolve().parent
 API = os.getenv("PARLIAMENT_API", "https://ws.parlament.ch/odata.svc")
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
+from .admin import router as admin_router
+app.include_router(admin_router)
 
 
 def pick(row, *keys):
