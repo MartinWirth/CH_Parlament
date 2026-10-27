@@ -8,13 +8,15 @@ import ipaddress
 import socket
 import re
 import json
+import secrets
 import unicodedata
 from html.parser import HTMLParser
 from urllib.parse import urljoin, parse_qs
 import xml.etree.ElementTree as ET
 from urllib.parse import urlparse, urlunparse
 import httpx
-from fastapi import FastAPI, HTTPException, Query
+from .public_https import PublicHTTPSClient
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -607,6 +609,10 @@ async def scan_homepage(client, url, semaphore, diagnostic=None, timeout_retry_s
         return cached[1]
     async with semaphore:
         found = {}
+        if os.getenv("ENABLE_EXTERNAL_HOMEPAGE_SCAN") != "1":
+            if diagnostic is not None:
+                diagnostic["status"] = "external_scan_disabled"
+            return found
         if diagnostic is not None:
             diagnostic.update({"status": "pending", "http_status": None, "final_url": url, "redirects": [], "cache_hit": bool(cached and now - cached[0] < _homepage_cache_ttl), "http_response_cache_hit": False})
         try:
@@ -931,11 +937,11 @@ async def homepage_profiles(communications, member_names=None):
     # Inspect raw social URLs as well: many personal sites embed their links in
     # script data rather than anchors. Accept extras only with a surname match.
     diagnostics = [{} for _ in homepages]
-    async with httpx.AsyncClient(timeout=8, trust_env=False, headers={"User-Agent": "CH-Parlament/1.0"}) as client:
+    async with PublicHTTPSClient(timeout=8, headers={"User-Agent": "CH-Parlament/1.0"}) as client:
         results = await asyncio.gather(*(scan_homepage(client, url, semaphore, diagnostics[i], timeout_retry_semaphore) for i, url in enumerate(homepages.values())))
     # Follow only two relevant, same-host subpages for otherwise empty homepages.
     subpage_results = {}
-    async with httpx.AsyncClient(timeout=8, trust_env=False, headers={"User-Agent": "CH-Parlament/1.0"}) as client:
+    async with PublicHTTPSClient(timeout=8, headers={"User-Agent": "CH-Parlament/1.0"}) as client:
         jobs = []
         for (number, _), links, diagnostic in zip(homepages.items(), results, diagnostics):
             diagnostic["subpage_scans"] = []
@@ -1428,7 +1434,7 @@ async def party_profile_links(member_rows, fresh_profiles=None):
     members = {str(pick(row, "PersonNumber")): normalize(row)["name"] for row in member_rows if is_current(row)}
     def ascii_key(value):
         return "".join(ch for ch in unicodedata.normalize("NFKD", value.casefold()) if ch.isascii() and ch.isalnum())
-    async with httpx.AsyncClient(timeout=5, trust_env=False, headers={"User-Agent": "CH-Parlament/1.0"}) as client:
+    async with PublicHTTPSClient(timeout=5, headers={"User-Agent": "CH-Parlament/1.0"}) as client:
         page_diagnostics = [{} for _ in sources]
         results = await asyncio.gather(*(scan_homepage(client, url, semaphore, page_diagnostics[i]) for i, url in enumerate(sources.values())))
     save_homepage_cache()
@@ -1541,8 +1547,22 @@ async def social_profiles_cached(language: str = Query("DE", pattern="^(DE|FR|IT
     snapshot = read_profile_snapshot().get(language, {})
     return {"profiles": snapshot.get("profiles", {}), "profiles_by_source": snapshot.get("profiles_by_source", {}), "updated_at": snapshot.get("updated_at"), "cached": True, "debug": snapshot.get("debug", {})}
 
-@app.get("/api/social-profiles/refresh")
-async def social_profiles_refresh(language: str = Query("DE", pattern="^(DE|FR|IT|RM)$"), force: bool = Query(False)):
+_refresh_lock = asyncio.Lock()
+
+@app.post("/api/social-profiles/refresh")
+async def social_profiles_refresh(request: Request, language: str = Query("DE", pattern="^(DE|FR|IT|RM)$"), force: bool = Query(False)):
+    configured_token = os.getenv("SOCIAL_REFRESH_TOKEN")
+    if not configured_token:
+        raise HTTPException(status_code=503, detail="Set SOCIAL_REFRESH_TOKEN to enable refresh")
+    if not secrets.compare_digest(request.headers.get("X-Refresh-Token", ""), configured_token):
+        raise HTTPException(status_code=403, detail="Refresh authorization required")
+    if _refresh_lock.locked():
+        raise HTTPException(status_code=409, detail="Refresh already running")
+    async with _refresh_lock:
+        return await _run_social_profiles_refresh(language, force)
+
+
+async def _run_social_profiles_refresh(language, force):
     """Refresh profiles independently of the immediate cached response."""
     cache_before = http_cache_diagnostics()
     rejection_before = {key: value["count"] for key, value in _http_cache_rejections.items()}

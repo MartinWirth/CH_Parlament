@@ -26,7 +26,7 @@ setDebugPhase(true);
 debugPhaseButton.addEventListener("click",()=>{
   setDebugPhase(!debugPhase);
   debug("Debug-Phase geändert",{enabled:debugPhase});
-  if(debugPhase&&all.length)document.querySelector("#social-refresh").click();
+  // Debug mode changes logging only; it must not trigger privileged network refresh.
 });
 function debug(message,data){const line=new Date().toISOString()+" "+message+(data===undefined?"":" "+JSON.stringify(data));console.info("[CH_Parlament]",line);logBox.textContent+=line+"\n";logBox.scrollTop=logBox.scrollHeight}
 const debugCopyStatus=document.querySelector("#debug-copy-status");
@@ -85,7 +85,7 @@ async function refreshSocialProfiles(requested,version,applyProfiles){
   debug("Social-Media-Aktualisierung gestartet",{language:requested});
   const started=performance.now();
   try{
-    const response=await fetch("/api/social-profiles/refresh?language="+encodeURIComponent(requested.toUpperCase()));
+    const response=await fetch("/api/social-profiles/refresh?language="+encodeURIComponent(requested.toUpperCase()),{method:"POST"});
     if(!response.ok)throw Error("HTTP "+response.status);
     const result=await response.json();
     applyProfiles(result,"aktualisiert");
@@ -119,11 +119,11 @@ async function loadSocialProfiles(requested,version){
   }catch(err){debug("Social-Media-Cache nicht verfügbar",{message:err.message})}
   if(version!==loadVersion)return;
   const age=updatedAt?Date.now()-Date.parse(updatedAt):Infinity;
-  if(!debugPhase&&Number.isFinite(age)&&age>=0&&age<SOCIAL_TTL_MS){
+  if(Number.isFinite(age)&&age>=0&&age<SOCIAL_TTL_MS){
     debug("Social-Media-Aktualisierung übersprungen",{reason:"Cache jünger als 24 Stunden",age_minutes:Math.round(age/60000)});
     return;
   }
-  await refreshSocialProfiles(requested,version,applyProfiles);
+  debug("Automatische Aktualisierung deaktiviert",{reason:"Refresh benötigt serverseitige Authentifizierung; vorhandener Snapshot bleibt verfügbar"});
 }
 loadMembers();
 
