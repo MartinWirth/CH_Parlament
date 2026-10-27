@@ -73,6 +73,12 @@ def save_report(language, report):
     if len(payload) > 2_000_000:
         raise ValueError("Report too large")
     with _connect() as connection:
+        previous_row = connection.execute(
+            "SELECT report_json FROM checks WHERE language=? ORDER BY id DESC LIMIT 1",
+            (language,)).fetchone()
+        previous = json.loads(previous_row[0]) if previous_row else None
+        from .social_alert_triage import reopen_on_recurrence
+        reopen_on_recurrence(connection, language, previous, report)
         connection.execute("INSERT INTO checks(language, checked_at, report_json) VALUES (?, ?, ?)",
                            (language, str(report.get("checked_at", "")), payload))
         connection.execute("""DELETE FROM checks WHERE language = ? AND id NOT IN
