@@ -29,7 +29,8 @@ def test_filters_search_platform_state_severity_and_date():
     for query in ({'search': '42'}, {'search': 'prüfen'}, {'search': 'INSTAGRAM'},
                   {'platform': 'instagram'}, {'severity': 'high'}, {'state': 'open'},
                   {'new_only': True}, {'date_from': '2026-10-27', 'date_to': '2026-10-27'}):
-        assert select(**query) == items[:1] if query != {'date_from': '2026-10-27', 'date_to': '2026-10-27'} else select(**query) == items
+        expected = items if 'date_from' in query else items[:1]
+        assert select(**query) == expected
     assert select(date_from='2026-10-28') == []
     assert select(date_to='2026-10-26') == []
     assert select(search='not-found') == []
