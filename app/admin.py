@@ -290,7 +290,7 @@ async def admin_alert_triage(request: Request):
     from .social_alerts import latest_alerts
     from .social_alert_triage import save_decision
     try:
-        if data["language"] not in ("DE", "FR", "IT", "RM"):
+        if not isinstance(data["language"], str) or data["language"] not in ("DE", "FR", "IT", "RM"):
             raise ValueError("Invalid language")
         current = latest_alerts(data["language"])
         if not any(item["person_number"] == data["person_number"] and
