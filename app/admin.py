@@ -276,3 +276,28 @@ async def admin_live_check_alerts(request: Request, language: str = "DE"):
         raise HTTPException(422, "Invalid language")
     from .social_alerts import latest_alerts
     return latest_alerts(language)
+
+
+@router.post("/live-check/alerts/triage")
+async def admin_alert_triage(request: Request):
+    _require(request)
+    if not _same_origin(request):
+        raise HTTPException(403, "Same-origin request required")
+    data = await request.json()
+    fields = {"language", "person_number", "platform", "url", "state", "reason"}
+    if not isinstance(data, dict) or set(data) != fields:
+        raise HTTPException(422, "Invalid triage request")
+    from .social_alerts import latest_alerts
+    from .social_alert_triage import save_decision
+    try:
+        if not isinstance(data["language"], str) or data["language"] not in ("DE", "FR", "IT", "RM"):
+            raise ValueError("Invalid language")
+        current = latest_alerts(data["language"])
+        if not any(item["person_number"] == data["person_number"] and
+                   item["platform"] == data["platform"] and item["url"] == data["url"]
+                   for item in current["alerts"]):
+            raise HTTPException(404, "Current alert not found")
+        result = save_decision(**data)
+    except (ValueError, TypeError):
+        raise HTTPException(422, "Invalid triage values")
+    return {"ok": True, **result}
