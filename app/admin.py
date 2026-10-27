@@ -270,7 +270,7 @@ async def admin_live_check_schedule(request: Request):
 
 
 @router.get("/live-check/alerts")
-async def admin_live_check_alerts(request: Request, language: str = "DE"):
+async def admin_live_check_alerts(request: Request, language: str = "DE", search: str = "",\n                                  platform: str = "", severity: str = "all", state: str = "all",\n                                  date_from: str = "", date_to: str = "", new_only: bool = False):
     _require(request)
     if language not in ("DE", "FR", "IT", "RM"):
         raise HTTPException(422, "Invalid language")
@@ -325,12 +325,12 @@ async def admin_alert_metrics(request: Request, language: str = "DE", limit: int
 
 
 @router.get("/live-check/alerts/export.csv")
-async def admin_alerts_csv(request: Request, language: str = "DE"):
+async def admin_alerts_csv(request: Request, language: str = "DE", search: str = "",\n                           platform: str = "", severity: str = "all", state: str = "all",\n                           date_from: str = "", date_to: str = "", new_only: bool = False):
     _require(request)
     from fastapi.responses import Response
     from .social_csv_export import export_alerts
     try:
-        content = export_alerts(language)
+        content = export_alerts(language, search=search, platform=platform, severity=severity,\n                                state=state, date_from=date_from, date_to=date_to, new_only=new_only)
     except ValueError:
         raise HTTPException(422, "Invalid export language")
     return Response(content, media_type="text/csv; charset=utf-8",
