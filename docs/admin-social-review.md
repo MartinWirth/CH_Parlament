@@ -22,3 +22,7 @@ same-origin and `X-Admin-Action: 1`. Example JSON POST:
 ```
 The URL must match an existing candidate in the current snapshot.
 The admin session and refresh lock remain process-local; use one worker.
+
+## Review dashboard filters
+
+The `/admin` review list now supports case-insensitive search across member number, platform, profile URL and source URL, filtering by pending/approved/rejected state and by platform, plus sorting by member, platform or status. Counts for all four statuses show the complete currently loaded language; the displayed count shows the filtered subset. All filtering happens locally in the browser, without changing review decisions. Refresh the list after a server refresh to see newly discovered candidates.

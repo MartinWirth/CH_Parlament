@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CH_Parlament – Administration</title>
 <style>
-body{font:16px system-ui,sans-serif;max-width:680px;margin:3rem auto;padding:0 1rem;color:#1c2530}
+body{font:16px system-ui,sans-serif;max-width:1040px;margin:3rem auto;padding:0 1rem;color:#1c2530}
 section{border:1px solid #cbd5e1;border-radius:12px;padding:1.5rem;margin:1rem 0}
 label{display:block;margin:.8rem 0}button,input,select{font:inherit;padding:.5rem}
 button{cursor:pointer}button:disabled{cursor:wait;opacity:.6}
@@ -32,7 +32,7 @@ button{cursor:pointer}button:disabled{cursor:wait;opacity:.6}
 <div id="status" role="status" aria-live="polite">Noch keine Aktualisierung.</div>
 <h2>Social-Media-Kandidaten prüfen</h2>
 <p>Links aus Parteiseiten und externen Quellen sind bis zur manuellen Freigabe unbestätigt.</p>
-<button id="review-load" type="button">Kandidaten laden</button>
+<label>Suche <input id="review-search" type="search" placeholder="Mitglied, Plattform, URL"></label><label>Status <select id="review-status"><option value="all">Alle</option><option value="pending">Ungeprüft</option><option value="approved">Bestätigt</option><option value="rejected">Verworfen</option></select></label><label>Plattform <select id="review-platform"><option value="all">Alle</option></select></label><label>Sortieren <select id="review-sort"><option value="member">Mitglied</option><option value="platform">Plattform</option><option value="status">Status</option></select></label><button id="review-load" type="button">Kandidaten laden</button><p id="review-stats" role="status"></p><p id="review-count"></p>
 <div id="review-list" aria-live="polite"></div>
 </section>
 <p id="message" role="alert"></p>
@@ -70,42 +70,9 @@ $("logout").addEventListener("click",async()=>{
   try{await request("logout",{method:"POST",headers});}catch(err){$("message").textContent=err.message;}
   showLogin();
 });
-$("review-load").addEventListener("click",loadReview);
-async function loadReview(){
-  const container=$("review-list");container.replaceChildren();
-  try{
-    const data=await request("review?language="+encodeURIComponent($("language").value));
-    const entries=Object.entries(data.candidates||{}).flatMap(([number,items])=>
-      Array.isArray(items)?items.map(item=>({number,item})) : []);
-    if(!entries.length){container.textContent="Keine Kandidaten vorhanden.";return;}
-    for(const {number,item} of entries){
-      const panel=document.createElement("section");
-      const title=document.createElement("p");
-      title.textContent="Mitglied "+number+" · "+item.platform+" · "+(item.review_status||"ungeprüft");
-      panel.append(title);
-      for(const [label,url] of [["Profil",item.url],["Quelle",item.source_url]]){
-        if(typeof url!=="string"||!url.startsWith("https://"))continue;
-        const p=document.createElement("p"),a=document.createElement("a");
-        a.href=url;a.target="_blank";a.rel="noopener noreferrer";a.textContent=label+": "+url;
-        p.append(a);panel.append(p);
-      }
-      for(const [decision,label] of [["approved","Bestätigen"],["rejected","Verwerfen"]]){
-        const button=document.createElement("button");button.type="button";button.textContent=label;
-        button.addEventListener("click",async()=>{
-          button.disabled=true;
-          try{
-            await request("review",{method:"POST",headers,
-              body:JSON.stringify({language:$("language").value,person_number:number,
-                url:item.url,decision})});
-            await loadReview();
-          }catch(err){$("message").textContent=err.message;button.disabled=false;}
-        });
-        panel.append(button);
-      }
-      container.append(panel);
-    }
-  }catch(err){$("message").textContent=err.message;}
-}
+</script>
+<script src="/admin/review-ui.js"></script>
+<script>
 loadStatus();
 </script>
 </body>
