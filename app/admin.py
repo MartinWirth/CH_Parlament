@@ -16,6 +16,7 @@ from pathlib import Path
 
 router = APIRouter(prefix="/admin")
 _sessions = {}
+_login_failures = {}
 _job = {"state": "idle", "started_at": None, "finished_at": None, "error": None}
 _task = None
 SESSION_SECONDS = 3600
@@ -60,10 +61,17 @@ async def admin_login(request: Request):
     configured = os.getenv("ADMIN_REFRESH_PASSWORD")
     if not configured or not os.getenv("SOCIAL_REFRESH_TOKEN"):
         raise HTTPException(503, "Admin refresh is not configured")
+    client_id = request.client.host if request.client else "unknown"
+    recent = [t for t in _login_failures.get(client_id, []) if time.monotonic() - t < 300]
+    _login_failures[client_id] = recent
+    if len(recent) >= 5:
+        raise HTTPException(429, "Too many login attempts; retry later")
     data = await request.json()
     password = data.get("password", "") if isinstance(data, dict) else ""
     if not isinstance(password, str) or not secrets.compare_digest(password, configured):
+        recent.append(time.monotonic())
         raise HTTPException(403, "Invalid credentials")
+    _login_failures.pop(client_id, None)
     from fastapi.responses import JSONResponse
     token = secrets.token_urlsafe(32)
     _sessions[token] = time.monotonic() + SESSION_SECONDS
