@@ -1694,6 +1694,19 @@ async def _run_social_profiles_refresh(language, force):
         path=os.getenv("SOCIAL_REVIEW_CANDIDATES_PATH",
                        str(ROOT.parent / "social_review_candidates.json")),
         checked_at=now.isoformat())
+    discovered_review = discover_party_review_candidates(
+        party_diagnostic, member_names, verified_social_url, now.isoformat())
+    for number, entries in discovered_review.items():
+        existing = review_candidates.setdefault(number, [])
+        known = {item["url"] for item in existing}
+        for entry in entries:
+            if entry["url"] not in known:
+                existing.append(entry)
+                known.add(entry["url"])
+    review_diagnostic["official_party_discovered"] = sum(
+        len(items) for items in discovered_review.values())
+    review_diagnostic["total_for_review"] = sum(
+        len(items) for items in review_candidates.values())
     # Candidates are separate from profiles: never promote a search result to
     # a verified personal account without independent identity confirmation.
     member_homepages = {str(row.get("PersonNumber")) for row in communications if str(row.get("CommunicationTypeText", "")).lower() in ("homepage", "page d'accueil", "sito internet") and homepage_url(row.get("Address"))}
