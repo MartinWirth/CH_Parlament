@@ -346,6 +346,56 @@ async function loadDataHealth(){
 $("health-load").addEventListener("click",loadDataHealth);
 $("health-threshold").addEventListener("change",loadDataHealth);
 $("language").addEventListener("change",loadDataHealth);
+async function loadQualityTrends(){
+  const chart=$("quality-trend-chart"),out=$("quality-trend-results");
+  chart.replaceChildren();out.replaceChildren();
+  try{
+    const params=new URLSearchParams({language:$("language").value,limit:$("quality-trend-limit").value});
+    const data=await request("data-health/trends?"+params);
+    const ns="http://www.w3.org/2000/svg",points=data.trend;
+    const add=(tag,attrs,content)=>{
+      const el=document.createElementNS(ns,tag);
+      for(const [key,value] of Object.entries(attrs))el.setAttribute(key,String(value));
+      if(content!==undefined)el.textContent=content;
+      chart.append(el);return el;
+    };
+    if(!points.length){out.textContent="Noch keine Prüfläufe.";return;}
+    const x=i=>55+(points.length===1?325:i*650/(points.length-1)),y=v=>235-v*1.9;
+    add("line",{x1:55,y1:235,x2:720,y2:235,stroke:"#64748b"});
+    add("line",{x1:55,y1:45,x2:55,y2:235,stroke:"#64748b"});
+    add("text",{x:5,y:50,fill:"#334155"},"100 %");
+    add("text",{x:25,y:239,fill:"#334155"},"0 %");
+    for(const [field,color,label] of [["reachable_percent","#15803d","Erreichbar"],["flagged_percent","#dc2626","Auffällig"]]){
+      let coords=[];
+      const flush=()=>{
+        if(coords.length>1)add("polyline",{points:coords.join(" "),fill:"none",stroke:color,"stroke-width":3});
+        coords=[];
+      };
+      points.forEach((p,i)=>{
+        if(p[field]===null){flush();return;}
+        coords.push(x(i)+","+y(p[field]));
+        const dot=add("circle",{cx:x(i),cy:y(p[field]),r:4,fill:color});
+        const title=document.createElementNS(ns,"title");
+        title.textContent=p.checked_at+" · "+label+": "+p[field]+" %";dot.append(title);
+      });
+      flush();
+    }
+    add("text",{x:55,y:273,fill:"#15803d"},"Grün: erreichbar");
+    add("text",{x:270,y:273,fill:"#dc2626"},"Rot: auffällig");
+    for(const p of points){
+      const line=document.createElement("p");
+      line.textContent=p.checked_at+" · "+p.checked+" geprüft · erreichbar: "+
+        (p.reachable_percent===null?"–":p.reachable_percent+" %")+
+        " · Auffällig: "+p.flagged+" · ungültig: "+(p.invalid??"nicht erfasst")+
+        " · Duplikate: "+(p.duplicates??"nicht erfasst")+
+        (p.truncated?" · Prüflimit erreicht":"");
+      out.append(line);
+    }
+  }catch(err){out.textContent="Qualitätstrend konnte nicht geladen werden: "+err.message;}
+}
+$("quality-trend-load").addEventListener("click",loadQualityTrends);
+$("quality-trend-limit").addEventListener("change",loadQualityTrends);
+$("language").addEventListener("change",loadQualityTrends);
 function archiveParams(){
   return new URLSearchParams({language:$("language").value,limit:$("archive-limit").value,
     search:$("archive-search").value,platform:$("archive-platform").value,
