@@ -184,3 +184,19 @@ async def admin_review_decision(request: Request):
 async def admin_review_script():
     from fastapi.responses import FileResponse
     return FileResponse(Path(__file__).resolve().parent / "static" / "admin-review.js", media_type="text/javascript")
+
+
+@router.get("/quality")
+async def admin_quality(request: Request, language: str = "DE"):
+    """Read-only audit of published profiles; never remove existing links."""
+    _require(request)
+    if language not in ("DE", "FR", "IT", "RM"):
+        raise HTTPException(422, "Invalid language")
+    from .main import read_profile_snapshot, verified_social_url
+    from .social_review import apply_decisions
+    from .social_quality import audit_profiles
+    snapshot = read_profile_snapshot()
+    apply_decisions(snapshot, language)
+    data = snapshot.get(language, {})
+    return {"language": language, "updated_at": data.get("updated_at"),
+            **audit_profiles(data.get("profiles", {}), verified_social_url)}
