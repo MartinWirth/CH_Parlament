@@ -108,7 +108,10 @@ async function loadSocialProfiles(requested,version){
     label.textContent=data.updated_at?"Zuletzt aktualisiert: "+new Date(data.updated_at).toLocaleString():"Noch nicht aktualisiert";
     debug("Social-Media-Profile "+source,{updated_members:updated,updated_at:data.updated_at,backend:data.debug});
   };
-  document.querySelector("#social-refresh").onclick=()=>refreshSocialProfiles(requested,version,applyProfiles);
+  const refreshButton=document.querySelector("#social-refresh");
+  refreshButton.disabled=true;
+  refreshButton.title="Aktualisierung nur serverseitig durch Administrator möglich";
+  refreshButton.onclick=null;
   let updatedAt=null;
   try{
     const response=await fetch("/api/social-profiles?language="+encodeURIComponent(requested.toUpperCase()));
