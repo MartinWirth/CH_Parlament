@@ -30,6 +30,10 @@ button{cursor:pointer}button:disabled{cursor:wait;opacity:.6}
 <button id="logout" type="button">Abmelden</button>
 <h3>Status</h3>
 <div id="status" role="status" aria-live="polite">Noch keine Aktualisierung.</div>
+<h2>Social-Media-Kandidaten prüfen</h2>
+<p>Links aus Parteiseiten und externen Quellen sind bis zur manuellen Freigabe unbestätigt.</p>
+<button id="review-load" type="button">Kandidaten laden</button>
+<div id="review-list" aria-live="polite"></div>
 </section>
 <p id="message" role="alert"></p>
 <script>
@@ -66,6 +70,42 @@ $("logout").addEventListener("click",async()=>{
   try{await request("logout",{method:"POST",headers});}catch(err){$("message").textContent=err.message;}
   showLogin();
 });
+$("review-load").addEventListener("click",loadReview);
+async function loadReview(){
+  const container=$("review-list");container.replaceChildren();
+  try{
+    const data=await request("review?language="+encodeURIComponent($("language").value));
+    const entries=Object.entries(data.candidates||{}).flatMap(([number,items])=>
+      Array.isArray(items)?items.map(item=>({number,item})) : []);
+    if(!entries.length){container.textContent="Keine Kandidaten vorhanden.";return;}
+    for(const {number,item} of entries){
+      const panel=document.createElement("section");
+      const title=document.createElement("p");
+      title.textContent="Mitglied "+number+" · "+item.platform+" · "+(item.review_status||"ungeprüft");
+      panel.append(title);
+      for(const [label,url] of [["Profil",item.url],["Quelle",item.source_url]]){
+        if(typeof url!=="string"||!url.startsWith("https://"))continue;
+        const p=document.createElement("p"),a=document.createElement("a");
+        a.href=url;a.target="_blank";a.rel="noopener noreferrer";a.textContent=label+": "+url;
+        p.append(a);panel.append(p);
+      }
+      for(const [decision,label] of [["approved","Bestätigen"],["rejected","Verwerfen"]]){
+        const button=document.createElement("button");button.type="button";button.textContent=label;
+        button.addEventListener("click",async()=>{
+          button.disabled=true;
+          try{
+            await request("review",{method:"POST",headers,
+              body:JSON.stringify({language:$("language").value,person_number:number,
+                url:item.url,decision})});
+            await loadReview();
+          }catch(err){$("message").textContent=err.message;button.disabled=false;}
+        });
+        panel.append(button);
+      }
+      container.append(panel);
+    }
+  }catch(err){$("message").textContent=err.message;}
+}
 loadStatus();
 </script>
 </body>

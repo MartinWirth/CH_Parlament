@@ -1547,7 +1547,10 @@ def save_profile_snapshot(snapshot):
 @app.get("/api/social-profiles")
 async def social_profiles_cached(language: str = Query("DE", pattern="^(DE|FR|IT|RM)$")):
     """Return the last saved profiles without network requests."""
-    snapshot = read_profile_snapshot().get(language, {})
+    all_snapshots = read_profile_snapshot()
+    from .social_review import apply_decisions
+    apply_decisions(all_snapshots, language)
+    snapshot = all_snapshots.get(language, {})
     return {"profiles": snapshot.get("profiles", {}), "profiles_by_source": snapshot.get("profiles_by_source", {}), "profile_evidence": snapshot.get("profile_evidence", {}), "review_candidates": snapshot.get("review_candidates", {}), "updated_at": snapshot.get("updated_at"), "cached": True, "debug": snapshot.get("debug", {})}
 
 _refresh_lock = asyncio.Lock()
@@ -1766,6 +1769,8 @@ async def _run_social_profiles_refresh(language, force):
     phase_started = time.monotonic()
     snapshot = read_profile_snapshot()
     snapshot[language] = data
+    from .social_review import apply_decisions
+    apply_decisions(snapshot, language)
     data["debug"]["phase_timings_ms"] = phase_ms
     data["debug"]["phase_timings_ms"]["snapshot_read_and_prepare"] = round((time.monotonic() - phase_started) * 1000, 1)
     save_started = time.monotonic()
