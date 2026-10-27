@@ -215,6 +215,8 @@ async def _execute_live_check(language):
         apply_decisions(snapshot, language)
         profiles = snapshot.get(language, {}).get("profiles", {})
         report = await check_links(profiles, verified_social_url)
+        from .social_check_history import save_report
+        save_report(language, report)
         _live_job.update(state="completed", **report)
     except Exception:
         import logging
@@ -243,3 +245,12 @@ async def admin_start_live_check(request: Request):
 async def admin_live_check_status(request: Request):
     _require(request)
     return dict(_live_job)
+
+
+@router.get("/live-check/history")
+async def admin_live_check_history(request: Request, language: str = "DE"):
+    _require(request)
+    if language not in ("DE", "FR", "IT", "RM"):
+        raise HTTPException(422, "Invalid language")
+    from .social_check_history import get_history
+    return {"language": language, "runs": get_history(language, limit=10)}
