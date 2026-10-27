@@ -301,3 +301,14 @@ async def admin_alert_triage(request: Request):
     except (ValueError, TypeError):
         raise HTTPException(422, "Invalid triage values")
     return {"ok": True, **result}
+
+
+@router.get("/live-check/alerts/events")
+async def admin_alert_events(request: Request, language: str, person_number: str,
+                             platform: str, url: str):
+    _require(request)
+    from .social_alert_triage import events
+    try:
+        return {"events": events(language, person_number, platform, url)}
+    except ValueError:
+        raise HTTPException(422, "Invalid alert identity")
