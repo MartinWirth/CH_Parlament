@@ -422,3 +422,13 @@ async def admin_facebook_legacy_review(request: Request):
         return resolve_legacy(**data)
     except ValueError:
         raise HTTPException(422, "Invalid legacy review or target conflict")
+
+
+@router.get("/data-health")
+async def admin_data_health(request: Request, language: str = "DE", stale_hours: int = 48):
+    _require(request)
+    from .social_data_health import data_health
+    try:
+        return data_health(language, stale_hours=stale_hours)
+    except ValueError:
+        raise HTTPException(422, "Invalid data health query")
