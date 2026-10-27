@@ -15,6 +15,7 @@ from urllib.parse import urljoin, parse_qs
 import xml.etree.ElementTree as ET
 from urllib.parse import urlparse, urlunparse
 import httpx
+from .public_https import PublicHTTPSClient
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -936,11 +937,11 @@ async def homepage_profiles(communications, member_names=None):
     # Inspect raw social URLs as well: many personal sites embed their links in
     # script data rather than anchors. Accept extras only with a surname match.
     diagnostics = [{} for _ in homepages]
-    async with httpx.AsyncClient(timeout=8, trust_env=False, headers={"User-Agent": "CH-Parlament/1.0"}) as client:
+    async with PublicHTTPSClient(timeout=8, headers={"User-Agent": "CH-Parlament/1.0"}) as client:
         results = await asyncio.gather(*(scan_homepage(client, url, semaphore, diagnostics[i], timeout_retry_semaphore) for i, url in enumerate(homepages.values())))
     # Follow only two relevant, same-host subpages for otherwise empty homepages.
     subpage_results = {}
-    async with httpx.AsyncClient(timeout=8, trust_env=False, headers={"User-Agent": "CH-Parlament/1.0"}) as client:
+    async with PublicHTTPSClient(timeout=8, headers={"User-Agent": "CH-Parlament/1.0"}) as client:
         jobs = []
         for (number, _), links, diagnostic in zip(homepages.items(), results, diagnostics):
             diagnostic["subpage_scans"] = []
@@ -1433,7 +1434,7 @@ async def party_profile_links(member_rows, fresh_profiles=None):
     members = {str(pick(row, "PersonNumber")): normalize(row)["name"] for row in member_rows if is_current(row)}
     def ascii_key(value):
         return "".join(ch for ch in unicodedata.normalize("NFKD", value.casefold()) if ch.isascii() and ch.isalnum())
-    async with httpx.AsyncClient(timeout=5, trust_env=False, headers={"User-Agent": "CH-Parlament/1.0"}) as client:
+    async with PublicHTTPSClient(timeout=5, headers={"User-Agent": "CH-Parlament/1.0"}) as client:
         page_diagnostics = [{} for _ in sources]
         results = await asyncio.gather(*(scan_homepage(client, url, semaphore, page_diagnostics[i]) for i, url in enumerate(sources.values())))
     save_homepage_cache()
