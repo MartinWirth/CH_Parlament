@@ -277,7 +277,15 @@ async def admin_live_check_alerts(request: Request, language: str = "DE", search
     if language not in ("DE", "FR", "IT", "RM"):
         raise HTTPException(422, "Invalid language")
     from .social_alerts import latest_alerts
-    return latest_alerts(language)
+    from .social_alert_filters import filter_alerts
+    report = latest_alerts(language)
+    try:
+        filtered = filter_alerts(report["alerts"], search=search, platform=platform,
+                                 severity=severity, state=state, date_from=date_from,
+                                 date_to=date_to, new_only=new_only, checked_at=report["checked_at"])
+    except ValueError:
+        raise HTTPException(422, "Invalid alert filters")
+    return {**report, "alerts": filtered, "filtered_count": len(filtered)}
 
 
 @router.post("/live-check/alerts/triage")
