@@ -267,3 +267,12 @@ async def admin_live_check_schedule(request: Request):
             "languages": languages if hours else [],
             "last_checks": {lang: latest_check_time(lang) for lang in languages
                             if hours and lang in ("DE", "FR", "IT", "RM")}}
+
+
+@router.get("/live-check/alerts")
+async def admin_live_check_alerts(request: Request, language: str = "DE"):
+    _require(request)
+    if language not in ("DE", "FR", "IT", "RM"):
+        raise HTTPException(422, "Invalid language")
+    from .social_alerts import latest_alerts
+    return latest_alerts(language)
