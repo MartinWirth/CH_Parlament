@@ -59,3 +59,15 @@ page is unavailable, `source_url` is null rather than guessed.
   `ENABLE_EXTERNAL_HOMEPAGE_SCAN=1`.
 - Candidate source URLs are not fetched, avoiding a new SSRF surface.
 - No private or non-public profiles are collected.
+
+
+## Automatic official-party candidate discovery
+
+During each normal social-profile refresh, the application also inspects the
+already scanned official party member pages and adds links that could not be
+confidently attributed to a person to `review_candidates`. This happens
+in-process; no separate CLI command is necessary. These records include the
+party profile page as their source and always have `auto_accept: false`.
+
+The optional `python -m app.party_candidate_cli` command remains available
+for backfilling an existing saved snapshot without a network refresh.
