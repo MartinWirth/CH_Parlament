@@ -16,7 +16,7 @@ import xml.etree.ElementTree as ET
 from urllib.parse import urlparse, urlunparse
 import httpx
 from .public_https import PublicHTTPSClient
-from .social_evidence import evidence_for_sources, load_review_candidates
+from .social_evidence import evidence_for_sources, load_review_candidates, discover_party_review_candidates
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
