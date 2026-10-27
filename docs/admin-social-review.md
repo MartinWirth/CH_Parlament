@@ -30,3 +30,7 @@ The `/admin` review list now supports case-insensitive search across member numb
 ## Qualitätsprüfung
 
 Unter `/admin` zeigt **Links prüfen** eine schreibgeschützte Prüfung der veröffentlichten Social-Media-Links an. Gemeldet werden ungültige URLs, Plattformabweichungen und identische Profil-URLs bei verschiedenen Mitgliedern. Die Prüfung erfolgt ohne Netzwerkzugriffe und löscht keine Profile. Sie kann deshalb nicht feststellen, ob ein Profil inzwischen offline ist oder zu einer bestimmten Person gehört.
+
+## Optionale Online-Erreichbarkeitsprüfung
+
+Unter `/admin` startet **Erreichbarkeit prüfen** eine asynchrone, nur nach Anmeldung und ausdrücklichem Klick ausgeführte Prüfung von maximal 100 verschiedenen Profil-URLs pro Lauf (maximal drei gleichzeitige HTTPS-Anfragen, sechs Sekunden Timeout). Der bestehende PublicHTTPSClient schützt bei DNS-Auflösung vor nicht öffentlichen IP-Adressen; Weiterleitungen werden nicht automatisch verfolgt. HTTP 200–299 gilt als erreichbar, 404/410 als möglicherweise nicht mehr vorhanden, 401/403/429 als eingeschränkt oder rate-limitiert. Fehler und Weiterleitungen werden separat gemeldet. Keine URL wird automatisch gelöscht oder umgehängt. Die Resultate werden nur im Arbeitsspeicher des Serverprozesses gehalten; ein Neustart verwirft sie. Eine Plattform kann Bots blockieren, weshalb ein HTTP-Fehler nicht zwingend ein verschwundenes Profil bedeutet.

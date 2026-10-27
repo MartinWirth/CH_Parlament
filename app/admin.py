@@ -200,3 +200,46 @@ async def admin_quality(request: Request, language: str = "DE"):
     data = snapshot.get(language, {})
     return {"language": language, "updated_at": data.get("updated_at"),
             **audit_profiles(data.get("profiles", {}), verified_social_url)}
+
+
+_live_job = {"state": "idle", "results": [], "checked": 0}
+_live_task = None
+
+
+async def _execute_live_check(language):
+    try:
+        from .main import read_profile_snapshot, verified_social_url
+        from .social_review import apply_decisions
+        from .social_live_check import check_links
+        snapshot = read_profile_snapshot()
+        apply_decisions(snapshot, language)
+        profiles = snapshot.get(language, {}).get("profiles", {})
+        report = await check_links(profiles, verified_social_url)
+        _live_job.update(state="completed", **report)
+    except Exception:
+        import logging
+        logging.getLogger("ch_parlament").exception("Social link check failed")
+        _live_job.update(state="failed", error="Link check failed; check server logs")
+
+
+@router.post("/live-check")
+async def admin_start_live_check(request: Request):
+    global _live_task
+    _require(request)
+    if not _same_origin(request):
+        raise HTTPException(403, "Same-origin request required")
+    data = await request.json()
+    if not isinstance(data, dict) or set(data) != {"language"} or data["language"] not in ("DE", "FR", "IT", "RM"):
+        raise HTTPException(422, "Invalid language")
+    if _live_task is not None and not _live_task.done():
+        raise HTTPException(409, "Link check already running")
+    _live_job.clear()
+    _live_job.update(state="running", language=data["language"], checked=0, results=[])
+    _live_task = asyncio.create_task(_execute_live_check(data["language"]))
+    return {"state": "running"}
+
+
+@router.get("/live-check")
+async def admin_live_check_status(request: Request):
+    _require(request)
+    return dict(_live_job)
