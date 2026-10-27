@@ -136,3 +136,45 @@ async def admin_refresh(request: Request):
                 error=None, language=language)
     _task = asyncio.create_task(_execute(language, force))
     return dict(_job)
+
+
+@router.get("/review")
+async def admin_review(request: Request, language: str = "DE"):
+    _require(request)
+    if language not in ("DE", "FR", "IT", "RM"):
+        raise HTTPException(422, "Invalid language")
+    from .main import read_profile_snapshot
+    from .social_review import apply_decisions
+    snapshot = read_profile_snapshot()
+    apply_decisions(snapshot, language)
+    data = snapshot.get(language, {})
+    return {"language": language, "updated_at": data.get("updated_at"),
+            "candidates": data.get("review_candidates", {})}
+
+
+@router.post("/review")
+async def admin_review_decision(request: Request):
+    _require(request)
+    if not _same_origin(request):
+        raise HTTPException(403, "Same-origin request required")
+    from .main import read_profile_snapshot, save_profile_snapshot, _refresh_lock
+    from .social_review import decide
+    data = await request.json()
+    if not isinstance(data, dict) or set(data) != {"language", "person_number", "url", "decision"}:
+        raise HTTPException(422, "Invalid review request")
+    language, number, url, decision = (data[k] for k in
+        ("language", "person_number", "url", "decision"))
+    if not all(isinstance(v, str) for v in (language, number, url, decision)):
+        raise HTTPException(422, "Invalid review values")
+    if _refresh_lock.locked():
+        raise HTTPException(409, "Refresh already running")
+    async with _refresh_lock:
+        snapshot = read_profile_snapshot()
+        try:
+            record = decide(snapshot, language, number, url, decision)
+        except ValueError:
+            raise HTTPException(422, "Invalid review action")
+        except LookupError:
+            raise HTTPException(404, "Candidate not found")
+        save_profile_snapshot(snapshot)
+    return {"ok": True, **record}
