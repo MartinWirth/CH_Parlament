@@ -33,7 +33,7 @@ button{cursor:pointer}button:disabled{cursor:wait;opacity:.6}
 <h2>Social-Media-Kandidaten prüfen</h2>
 <p>Links aus Parteiseiten und externen Quellen sind bis zur manuellen Freigabe unbestätigt.</p>
 <label>Suche <input id="review-search" type="search" placeholder="Mitglied, Plattform, URL"></label><label>Status <select id="review-status"><option value="all">Alle</option><option value="pending">Ungeprüft</option><option value="approved">Bestätigt</option><option value="rejected">Verworfen</option></select></label><label>Plattform <select id="review-platform"><option value="all">Alle</option></select></label><label>Sortieren <select id="review-sort"><option value="member">Mitglied</option><option value="platform">Plattform</option><option value="status">Status</option></select></label><button id="review-load" type="button">Kandidaten laden</button><p id="review-stats" role="status"></p><p id="review-count"></p>
-<div id="review-list" aria-live="polite"></div><h2>Link-Qualitätsprüfung</h2><p>Ungültige oder mehrfach zugeordnete Profile werden nur markiert, nicht gelöscht.</p><button id="quality-load" type="button">Links prüfen</button><p id="quality-summary" role="status"></p><div id="quality-issues"></div>
+<div id="review-list" aria-live="polite"></div><h2>Link-Qualitätsprüfung</h2><p>Ungültige oder mehrfach zugeordnete Profile werden nur markiert, nicht gelöscht.</p><button id="quality-load" type="button">Links prüfen</button><p id="quality-summary" role="status"></p><div id="quality-issues"></div><h3>Online-Erreichbarkeit</h3><p>Prüft maximal 100 unterschiedliche Links pro Lauf. Social-Media-Plattformen können automatisierte Zugriffe blockieren.</p><button id="live-check" type="button">Erreichbarkeit prüfen</button><p id="live-status" role="status"></p><div id="live-results"></div>
 </section>
 <p id="message" role="alert"></p>
 <script>
@@ -89,6 +89,33 @@ $("quality-load").addEventListener("click",async()=>{
     }
     if(!data.issues.length)container.textContent="Keine strukturellen Probleme erkannt.";
   }catch(err){$("quality-summary").textContent="Prüfung fehlgeschlagen";$("message").textContent=err.message;}
+});
+let livePoll=null;
+async function loadLiveCheck(){
+  try{
+    const data=await request("live-check");
+    $("live-status").textContent="Status: "+data.state+" · Geprüft: "+(data.checked||0)+
+      (data.truncated?" · Maximalgrenze erreicht":"");
+    if(data.state==="running")return;
+    clearInterval(livePoll);livePoll=null;$("live-check").disabled=false;
+    const container=$("live-results");container.replaceChildren();
+    for(const result of data.results||[]){
+      const p=document.createElement("p");
+      p.textContent="Mitglied "+result.person_number+" · "+result.platform+" · "+
+        result.status+" · HTTP "+(result.http_status??"–")+" · "+result.url+
+        (result.redirect_target?" · Weiterleitung: "+result.redirect_target:"");
+      container.append(p);
+    }
+  }catch(err){clearInterval(livePoll);livePoll=null;$("live-check").disabled=false;$("message").textContent=err.message;}
+}
+$("live-check").addEventListener("click",async()=>{
+  $("live-check").disabled=true;$("live-results").replaceChildren();
+  try{
+    await request("live-check",{method:"POST",headers,
+      body:JSON.stringify({language:$("language").value})});
+    await loadLiveCheck();
+    if(!livePoll)livePoll=setInterval(loadLiveCheck,2500);
+  }catch(err){$("live-check").disabled=false;$("message").textContent=err.message;}
 });
 loadStatus();
 </script>
