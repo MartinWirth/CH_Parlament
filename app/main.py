@@ -608,6 +608,10 @@ async def scan_homepage(client, url, semaphore, diagnostic=None, timeout_retry_s
         return cached[1]
     async with semaphore:
         found = {}
+        if os.getenv("ENABLE_EXTERNAL_HOMEPAGE_SCAN") != "1":
+            if diagnostic is not None:
+                diagnostic["status"] = "external_scan_disabled"
+            return found
         if diagnostic is not None:
             diagnostic.update({"status": "pending", "http_status": None, "final_url": url, "redirects": [], "cache_hit": bool(cached and now - cached[0] < _homepage_cache_ttl), "http_response_cache_hit": False})
         try:
@@ -1547,7 +1551,9 @@ _refresh_lock = asyncio.Lock()
 @app.post("/api/social-profiles/refresh")
 async def social_profiles_refresh(request: Request, language: str = Query("DE", pattern="^(DE|FR|IT|RM)$"), force: bool = Query(False)):
     configured_token = os.getenv("SOCIAL_REFRESH_TOKEN")
-    if configured_token and not secrets.compare_digest(request.headers.get("X-Refresh-Token", ""), configured_token):
+    if not configured_token:
+        raise HTTPException(status_code=503, detail="Set SOCIAL_REFRESH_TOKEN to enable refresh")
+    if not secrets.compare_digest(request.headers.get("X-Refresh-Token", ""), configured_token):
         raise HTTPException(status_code=403, detail="Refresh authorization required")
     if _refresh_lock.locked():
         raise HTTPException(status_code=409, detail="Refresh already running")
