@@ -1,6 +1,6 @@
 """Offline social-profile quality audit: no network access and no automatic deletions."""
 from collections import defaultdict
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 
 def canonical_url(url):
@@ -12,7 +12,17 @@ def canonical_url(url):
                 parsed.username or parsed.password or parsed.port not in (None, 443)):
             return None
         path = parsed.path.rstrip("/") or "/"
-        return urlunsplit(("https", parsed.hostname.lower(), path, "", ""))
+        host = parsed.hostname.lower()
+        query = ""
+        # Facebook's legacy profile.php route identifies the account by its id
+        # query parameter. Dropping it would merge unrelated people's profiles.
+        if host in ("facebook.com", "www.facebook.com", "m.facebook.com") and path.lower() == "/profile.php":
+            pairs = parse_qsl(parsed.query, keep_blank_values=True, max_num_fields=100)
+            identifiers = [value for key, value in pairs if key == "id"]
+            if len(identifiers) != 1 or not identifiers[0].strip():
+                return None
+            query = urlencode({"id": identifiers[0]})
+        return urlunsplit(("https", host, path, query, ""))
     except (ValueError, UnicodeError):
         return None
 
