@@ -93,3 +93,55 @@ def load_review_candidates(member_names, verified_social_url, path=None, checked
         })
     return result, {"configured": len(entries), "accepted_for_review": len(seen),
                     "rejected": rejected + max(0, len(entries) - 2000)}
+
+
+def discover_party_review_candidates(party_diagnostic, member_names, verified_social_url,
+                                     checked_at=None):
+    """Collect rejected social links already seen on official member party pages.
+
+    The upstream roster discovery binds each page to a current member by exact
+    name. Links still require manual identity verification; party footer links
+    must never become personal profiles automatically.
+    """
+    checked_at = checked_at or _utc_now()
+    result, seen = {}, set()
+    for page in party_diagnostic.get("pages", [])[:500]:
+        if not isinstance(page, dict):
+            continue
+        number = str(page.get("person_number", ""))
+        if not number or page.get("name") != member_names.get(number):
+            continue
+        source = page.get("profile_url")
+        if not isinstance(source, str) or not source.startswith("https://"):
+            continue
+        try:
+            parsed = urlparse(source)
+            if (not parsed.hostname or parsed.username or parsed.password or
+                    parsed.port not in (None, 443)):
+                continue
+        except ValueError:
+            continue
+        rejected = page.get("rejected", {})
+        if not isinstance(rejected, dict):
+            continue
+        for entry in rejected.values():
+            if not isinstance(entry, dict):
+                continue
+            url = entry.get("url")
+            if not isinstance(url, str):
+                continue
+            try:
+                platform = verified_social_url(url)
+            except (ValueError, UnicodeError):
+                continue
+            if not platform or (number, url) in seen:
+                continue
+            seen.add((number, url))
+            result.setdefault(number, []).append({
+                "platform": platform, "url": url, "source_type": "official_party_profile",
+                "source_url": source, "checked_at": checked_at,
+                "verification_status": "requires_identity_verification",
+                "auto_accept": False,
+                "reason": entry.get("reason", "identity_not_confirmed"),
+            })
+    return result
