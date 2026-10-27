@@ -33,7 +33,7 @@ button{cursor:pointer}button:disabled{cursor:wait;opacity:.6}
 <h2>Social-Media-Kandidaten prüfen</h2>
 <p>Links aus Parteiseiten und externen Quellen sind bis zur manuellen Freigabe unbestätigt.</p>
 <label>Suche <input id="review-search" type="search" placeholder="Mitglied, Plattform, URL"></label><label>Status <select id="review-status"><option value="all">Alle</option><option value="pending">Ungeprüft</option><option value="approved">Bestätigt</option><option value="rejected">Verworfen</option></select></label><label>Plattform <select id="review-platform"><option value="all">Alle</option></select></label><label>Sortieren <select id="review-sort"><option value="member">Mitglied</option><option value="platform">Plattform</option><option value="status">Status</option></select></label><button id="review-load" type="button">Kandidaten laden</button><p id="review-stats" role="status"></p><p id="review-count"></p>
-<div id="review-list" aria-live="polite"></div><h2>Link-Qualitätsprüfung</h2><p>Ungültige oder mehrfach zugeordnete Profile werden nur markiert, nicht gelöscht.</p><button id="quality-load" type="button">Links prüfen</button><p id="quality-summary" role="status"></p><div id="quality-issues"></div><h3>Online-Erreichbarkeit</h3><p>Prüft maximal 100 unterschiedliche Links pro Lauf. Social-Media-Plattformen können automatisierte Zugriffe blockieren.</p><button id="live-check" type="button">Erreichbarkeit prüfen</button><p id="live-status" role="status"></p><div id="live-results"></div><h3>Automatische Prüfung</h3><p id="schedule-status" role="status"></p><h3>Kennzahlen und Trends</h3><p>Aktuelle Bearbeitungsstände und Entwicklung der technischen Auffälligkeiten pro Prüflauf.</p><label>Zeitraum <select id="metrics-limit"><option value="5">5 Prüfläufe</option><option value="10" selected>10 Prüfläufe</option><option value="20">20 Prüfläufe</option><option value="30">30 Prüfläufe</option></select></label><button id="metrics-load" type="button">Kennzahlen laden</button><button id="metrics-export" type="button">Prüfstatistiken als CSV</button><div id="metrics-summary" class="metric-grid" role="status"></div><svg id="metrics-chart" viewBox="0 0 760 280" role="img" aria-label="Trend technischer Warnmeldungen"></svg><p id="metrics-note"></p><h3>Warnmeldungen</h3><p>Aktuelle Auffälligkeiten der letzten gespeicherten Prüfung, priorisiert und ohne automatische Profiländerung.</p><label>Suche <input id="alert-search" type="search" placeholder="Mitglied, Plattform, URL, Begründung"></label><label>Plattform <input id="alert-platform" type="search" placeholder="z. B. Instagram"></label><label>Prüfdatum von <input id="alert-date-from" type="date"></label><label>Prüfdatum bis <input id="alert-date-to" type="date"></label><p>Der Zeitraum bezieht sich auf das Datum der letzten Prüfung, nicht auf frühere Warnmeldungen.</p><label>Priorität <select id="alert-severity"><option value="all">Alle</option><option value="high">Hoch</option><option value="medium">Mittel</option><option value="low">Niedrig</option></select></label><label><input id="alert-new-only" type="checkbox"> Nur neue Probleme</label><label>Bearbeitung <select id="alert-review-filter"><option value="all">Alle</option><option value="open">Offen</option><option value="in_progress">In Bearbeitung</option><option value="resolved">Erledigt</option><option value="ignored">Ignoriert</option></select></label><button id="alerts-load" type="button">Warnmeldungen laden</button><button id="alerts-export" type="button">Warnmeldungen als CSV</button><p id="alerts-summary" role="status"></p><div id="alerts-results"></div><h3>Prüfverlauf und Veränderungen</h3><button id="history-load" type="button">Prüfverlauf laden</button><p id="history-summary" role="status"></p><div id="history-results"></div>
+<div id="review-list" aria-live="polite"></div><h2>Link-Qualitätsprüfung</h2><p>Ungültige oder mehrfach zugeordnete Profile werden nur markiert, nicht gelöscht.</p><button id="quality-load" type="button">Links prüfen</button><p id="quality-summary" role="status"></p><div id="quality-issues"></div><h3>Online-Erreichbarkeit</h3><p>Prüft maximal 100 unterschiedliche Links pro Lauf. Social-Media-Plattformen können automatisierte Zugriffe blockieren.</p><button id="live-check" type="button">Erreichbarkeit prüfen</button><p id="live-status" role="status"></p><div id="live-results"></div><h3>Automatische Prüfung</h3><p id="schedule-status" role="status"></p><h3>Kennzahlen und Trends</h3><p>Aktuelle Bearbeitungsstände und Entwicklung der technischen Auffälligkeiten pro Prüflauf.</p><label>Zeitraum <select id="metrics-limit"><option value="5">5 Prüfläufe</option><option value="10" selected>10 Prüfläufe</option><option value="20">20 Prüfläufe</option><option value="30">30 Prüfläufe</option></select></label><button id="metrics-load" type="button">Kennzahlen laden</button><button id="metrics-export" type="button">Prüfstatistiken als CSV</button><div id="metrics-summary" class="metric-grid" role="status"></div><svg id="metrics-chart" viewBox="0 0 760 280" role="img" aria-label="Trend technischer Warnmeldungen"></svg><p id="metrics-note"></p><h3>Warnmeldungen</h3><p>Aktuelle Auffälligkeiten der letzten gespeicherten Prüfung, priorisiert und ohne automatische Profiländerung.</p><label>Priorität <select id="alert-severity"><option value="all">Alle</option><option value="high">Hoch</option><option value="medium">Mittel</option><option value="low">Niedrig</option></select></label><label><input id="alert-new-only" type="checkbox"> Nur neue Probleme</label><label>Bearbeitung <select id="alert-review-filter"><option value="all">Alle</option><option value="open">Offen</option><option value="in_progress">In Bearbeitung</option><option value="resolved">Erledigt</option><option value="ignored">Ignoriert</option></select></label><button id="alerts-load" type="button">Warnmeldungen laden</button><button id="alerts-export" type="button">Warnmeldungen als CSV</button><p id="alerts-summary" role="status"></p><div id="alerts-results"></div><h3>Prüfverlauf und Veränderungen</h3><button id="history-load" type="button">Prüfverlauf laden</button><p id="history-summary" role="status"></p><div id="history-results"></div>
 </section>
 <p id="message" role="alert"></p>
 <script>
@@ -187,14 +187,8 @@ async function downloadAdminCsv(path,filename){
     }finally{setTimeout(()=>URL.revokeObjectURL(url),1000);}
   }catch(err){$("message").textContent="CSV-Export fehlgeschlagen: "+err.message;}
 }
-function alertFilterParams(){
-  return new URLSearchParams({language:$("language").value,search:$("alert-search").value,
-    platform:$("alert-platform").value,severity:$("alert-severity").value,
-    state:$("alert-review-filter").value,date_from:$("alert-date-from").value,
-    date_to:$("alert-date-to").value,new_only:String($("alert-new-only").checked)});
-}
 $("alerts-export").addEventListener("click",()=>downloadAdminCsv(
-  "live-check/alerts/export.csv?"+alertFilterParams().toString(),
+  "live-check/alerts/export.csv?language="+encodeURIComponent($("language").value),
   "social-alerts-"+$("language").value+".csv"));
 $("metrics-export").addEventListener("click",()=>downloadAdminCsv(
   "live-check/metrics/export.csv?language="+encodeURIComponent($("language").value)+
@@ -203,7 +197,10 @@ $("metrics-export").addEventListener("click",()=>downloadAdminCsv(
 let currentAlerts=[];
 function renderAlerts(){
   const container=$("alerts-results");container.replaceChildren();
-  const filtered=currentAlerts;
+  const severity=$("alert-severity").value;
+  const onlyNew=$("alert-new-only").checked;
+  const reviewFilter=$("alert-review-filter").value;
+  const filtered=currentAlerts.filter(item=>(severity==="all"||item.severity===severity)&&(!onlyNew||item.new_problem)&&(reviewFilter==="all"||item.review_state===reviewFilter));
   for(const item of filtered){
     const p=document.createElement("p");
     p.textContent=(item.new_problem?"NEU · ":"")+
@@ -225,7 +222,7 @@ function renderAlerts(){
         await request("live-check/alerts/triage",{method:"POST",headers,
           body:JSON.stringify({language:$("language").value,person_number:item.person_number,
             platform:item.platform,url:item.url,state:state.value,reason:reason.value})});
-        await loadAlerts();await loadMetrics();
+        await loadAlerts();
       }catch(err){$("message").textContent=err.message;save.disabled=false;}
     });
     const history=document.createElement("button");history.type="button";history.textContent="Verlauf";
@@ -251,24 +248,19 @@ function renderAlerts(){
 }
 async function loadAlerts(){
   try{
-    const data=await request("live-check/alerts?"+alertFilterParams().toString());
+    const data=await request("live-check/alerts?language="+encodeURIComponent($("language").value));
     currentAlerts=data.alerts;
     $("alerts-summary").textContent=data.checked_at?
       "Stand: "+data.checked_at+" · Hoch: "+data.counts.high+" · Mittel: "+data.counts.medium+
-      " · Niedrig: "+data.counts.low+" · Neu: "+data.counts.new+" · Treffer: "+data.filtered_count:
+      " · Niedrig: "+data.counts.low+" · Neu: "+data.counts.new:
       "Noch keine gespeicherte Online-Prüfung vorhanden.";
     renderAlerts();
   }catch(err){$("alerts-summary").textContent="Warnmeldungen konnten nicht geladen werden";$("message").textContent=err.message;}
 }
 $("alerts-load").addEventListener("click",loadAlerts);
-for(const id of ["alert-severity","alert-new-only","alert-review-filter",
-                 "alert-date-from","alert-date-to"]){
-  $(id).addEventListener("change",loadAlerts);
-}
-for(const id of ["alert-search","alert-platform"]){
-  $(id).addEventListener("input",()=>{clearTimeout(alertSearchTimer);alertSearchTimer=setTimeout(loadAlerts,250);});
-}
-let alertSearchTimer=null;
+$("alert-severity").addEventListener("change",renderAlerts);
+$("alert-new-only").addEventListener("change",renderAlerts);
+$("alert-review-filter").addEventListener("change",renderAlerts);
 async function loadCheckHistory(){
   const container=$("history-results");container.replaceChildren();
   try{
