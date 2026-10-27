@@ -11,7 +11,7 @@ def test_refresh_requires_post_and_rejects_bad_token(monkeypatch):
         transport = httpx.ASGITransport(app=main.app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             assert (await client.get("/api/social-profiles/refresh")).status_code == 405
-            assert (await client.post("/api/social-profiles/refresh", headers={"X-Refresh-Token": "secret-for-test"})).status_code == 403
+            assert (await client.post("/api/social-profiles/refresh")).status_code == 403
             assert (await client.post("/api/social-profiles/refresh", headers={"X-Refresh-Token": "wrong"})).status_code == 403
     asyncio.run(run())
 
@@ -31,7 +31,7 @@ def test_refresh_serializes_concurrent_requests(monkeypatch):
     async def run():
         transport = httpx.ASGITransport(app=main.app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-            first = asyncio.create_task(client.post("/api/social-profiles/refresh"))
+            first = asyncio.create_task(client.post("/api/social-profiles/refresh", headers={"X-Refresh-Token": "secret-for-test"}))
             await entered.wait()
             second = await client.post("/api/social-profiles/refresh", headers={"X-Refresh-Token": "secret-for-test"})
             assert second.status_code == 409
