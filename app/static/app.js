@@ -26,7 +26,7 @@ setDebugPhase(true);
 debugPhaseButton.addEventListener("click",()=>{
   setDebugPhase(!debugPhase);
   debug("Debug-Phase geändert",{enabled:debugPhase});
-  if(debugPhase&&all.length)document.querySelector("#social-refresh").click();
+  // Debug mode changes logging only; it must not trigger privileged network refresh.
 });
 function debug(message,data){const line=new Date().toISOString()+" "+message+(data===undefined?"":" "+JSON.stringify(data));console.info("[CH_Parlament]",line);logBox.textContent+=line+"\n";logBox.scrollTop=logBox.scrollHeight}
 const debugCopyStatus=document.querySelector("#debug-copy-status");
@@ -123,7 +123,7 @@ async function loadSocialProfiles(requested,version){
     debug("Social-Media-Aktualisierung übersprungen",{reason:"Cache jünger als 24 Stunden",age_minutes:Math.round(age/60000)});
     return;
   }
-  await refreshSocialProfiles(requested,version,applyProfiles);
+  debug("Automatische Aktualisierung deaktiviert",{reason:"Refresh benötigt serverseitige Authentifizierung; vorhandener Snapshot bleibt verfügbar"});
 }
 loadMembers();
 
