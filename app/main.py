@@ -1,3 +1,6 @@
+from .config import load_environment
+load_environment()
+
 from datetime import datetime, timezone
 from pathlib import Path
 import os
