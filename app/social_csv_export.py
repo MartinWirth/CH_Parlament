@@ -9,6 +9,8 @@ ALERT_COLUMNS = ('language', 'checked_at', 'person_number', 'platform', 'url',
                  'status', 'http_status', 'severity', 'new_problem', 'previous_status',
                  'review_state', 'review_reason', 'review_updated_at')
 TREND_COLUMNS = ('language', 'checked_at', 'checked', 'flagged', 'high', 'medium', 'low')
+ARCHIVE_COLUMNS = ('language', 'run_id', 'checked_at', 'person_number', 'platform',
+                   'url', 'status', 'http_status', 'severity', 'new_problem', 'previous_status')
 
 
 def safe_cell(value):
@@ -18,17 +20,14 @@ def safe_cell(value):
     if isinstance(value, bool):
         return 'true' if value else 'false'
     value = str(value)
-    if value.lstrip(' \t\r
-').startswith(('=', '+', '-', '@')) or value.startswith(('\t', '\r', '
-')):
+    if value.lstrip(' \t\r\n').startswith(('=', '+', '-', '@')) or value.startswith(('\t', '\r', '\n')):
         return "'" + value
     return value
 
 
 def render_csv(columns, records):
     buffer = io.StringIO(newline='')
-    writer = csv.writer(buffer, delimiter=';', lineterminator='\r
-')
+    writer = csv.writer(buffer, delimiter=';', lineterminator='\r\n')
     writer.writerow(columns)
     for record in records:
         writer.writerow([safe_cell(record.get(column)) for column in columns])
@@ -49,10 +48,6 @@ def export_trends(language, limit=10):
     metrics = alert_metrics(language, limit)
     rows = [dict(item, language=language) for item in metrics['trend']]
     return render_csv(TREND_COLUMNS, rows)
-
-
-ARCHIVE_COLUMNS = ('language', 'run_id', 'checked_at', 'person_number', 'platform',
-                   'url', 'status', 'http_status', 'severity', 'new_problem', 'previous_status')
 
 
 def export_archive(language, *, limit=30, search='', platform='', severity='all',
