@@ -322,3 +322,31 @@ async def admin_alert_metrics(request: Request, language: str = "DE", limit: int
         return alert_metrics(language, limit)
     except ValueError:
         raise HTTPException(422, "Invalid metrics query")
+
+
+@router.get("/live-check/alerts/export.csv")
+async def admin_alerts_csv(request: Request, language: str = "DE"):
+    _require(request)
+    from fastapi.responses import Response
+    from .social_csv_export import export_alerts
+    try:
+        content = export_alerts(language)
+    except ValueError:
+        raise HTTPException(422, "Invalid export language")
+    return Response(content, media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="social-alerts-{language}.csv"',
+                             "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+
+
+@router.get("/live-check/metrics/export.csv")
+async def admin_metrics_csv(request: Request, language: str = "DE", limit: int = 10):
+    _require(request)
+    from fastapi.responses import Response
+    from .social_csv_export import export_trends
+    try:
+        content = export_trends(language, limit)
+    except ValueError:
+        raise HTTPException(422, "Invalid export query")
+    return Response(content, media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="social-trends-{language}.csv"',
+                             "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
