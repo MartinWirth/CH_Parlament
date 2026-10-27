@@ -49,3 +49,17 @@ def export_trends(language, limit=10):
     metrics = alert_metrics(language, limit)
     rows = [dict(item, language=language) for item in metrics['trend']]
     return render_csv(TREND_COLUMNS, rows)
+
+
+ARCHIVE_COLUMNS = ('language', 'run_id', 'checked_at', 'person_number', 'platform',
+                   'url', 'status', 'http_status', 'severity', 'new_problem', 'previous_status')
+
+
+def export_archive(language, *, limit=30, search='', platform='', severity='all',
+                   date_from='', date_to='', new_only=False):
+    from .social_alert_archive import archived_alerts
+    archive = archived_alerts(language, limit=limit, search=search, platform=platform,
+                              severity=severity, date_from=date_from, date_to=date_to,
+                              new_only=new_only)
+    return render_csv(ARCHIVE_COLUMNS,
+                      [dict(item, language=language) for item in archive['alerts']])
