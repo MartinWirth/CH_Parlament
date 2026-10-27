@@ -86,10 +86,10 @@ def get_history(language, limit=10):
     with _connect() as connection:
         rows = connection.execute(
             "SELECT id, checked_at, report_json FROM checks WHERE language=? ORDER BY id DESC LIMIT ?",
-            (language, limit)).fetchall()
+            (language, limit + 1)).fetchall()
     reports = [(id_, checked_at, json.loads(payload)) for id_, checked_at, payload in rows]
     summaries = []
-    for index, (id_, checked_at, report) in enumerate(reports):
+    for index, (id_, checked_at, report) in enumerate(reports[:limit]):
         previous = reports[index + 1][2] if index + 1 < len(reports) else None
         results = report.get("results", [])
         flagged = [item for item in results if item.get("status") in
