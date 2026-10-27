@@ -4,7 +4,7 @@ This is not a historical triage-state ledger; manual decisions live in audit eve
 """
 import json
 from .social_check_history import _connect, LANGUAGES, MAX_RUNS, _key
-from .social_alerts import severity
+from .social_alerts import severity as alert_severity
 from .social_alert_filters import filter_alerts
 
 
@@ -23,7 +23,7 @@ def archived_alerts(language, *, limit=30, search='', platform='', severity='all
         prior = {_key(item): item for item in previous.get('results', []) if _key(item)} if previous else {}
         run_alerts = []
         for item in report.get('results', []):
-            level = severity(item)
+            level = alert_severity(item)
             if not level:
                 continue
             key = _key(item)
