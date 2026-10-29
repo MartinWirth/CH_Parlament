@@ -23,7 +23,7 @@ button{cursor:pointer}button:disabled{cursor:wait;opacity:.6}
 </form>
 </section>
 <section id="dashboard" hidden>
-<h2>Profilaktualisierung</h2>
+<h2>Datenqualität und Systemzustand</h2><p>Übersicht für die gewählte Sprache. Die Erreichbarkeitsprüfung kann auf 100 Links begrenzt sein.</p><label>Warnschwelle letzte Prüfung <select id="health-threshold"><option value="24">24 Stunden</option><option value="48" selected>48 Stunden</option><option value="168">7 Tage</option></select></label><button id="health-load" type="button">Systemzustand laden</button><div id="health-cards" class="metric-grid" role="status"></div><p id="health-check"></p><div id="health-warnings" role="status"></div><h3>Datenqualität im Zeitverlauf</h3><label>Prüfläufe <select id="quality-trend-limit"><option>5</option><option selected>10</option><option>20</option><option>30</option></select></label><button id="quality-trend-load" type="button">Qualitätstrend laden</button><svg id="quality-trend-chart" viewBox="0 0 760 280" role="img" aria-label="Anteil erreichbarer und auffälliger Links" style="width:100%;height:auto"></svg><div id="quality-trend-results" role="status"></div><h3>Qualitätsverschlechterungen</h3><p>Vergleicht aufeinanderfolgende gespeicherte Prüfläufe; Stichprobenänderungen können die Ergebnisse beeinflussen.</p><label>Rückgang Erreichbarkeit (Prozentpunkte) <input id="regression-reach" type="number" min="0" max="100" value="10"></label><label>Anstieg Auffälligkeiten (Prozentpunkte) <input id="regression-flagged" type="number" min="0" max="100" value="10"></label><label>Zusätzliche Duplikate <input id="regression-duplicates" type="number" min="0" max="10000" value="1"></label><label>Zusätzliche ungültige Links <input id="regression-invalid" type="number" min="0" max="10000" value="1"></label><button id="regression-load" type="button">Verschlechterungen prüfen</button><div id="regression-results" role="status"></div><h3>Persönliche Social-Media-Profile recherchieren</h3><p>Priorisierte Suchaufträge für fehlende persönliche Accounts. Suchtreffer sind keine bestätigten Profile und müssen vor einer Zuordnung geprüft werden.</p><label>Plattform <select id="discovery-platform"><option value="all">Alle</option><option>LinkedIn</option><option>Instagram</option><option>Facebook</option><option>X</option><option>YouTube</option></select></label><button id="discovery-load" type="button">Rechercheaufträge laden</button><p id="discovery-summary" role="status"></p><div id="discovery-results"></div><h2>Profilaktualisierung</h2>
 <label>Sprache <select id="language"><option>DE</option><option>FR</option><option>IT</option><option>RM</option></select></label>
 <label><input type="checkbox" id="force"> Aktualisierung erzwingen</label>
 <button id="refresh" type="button">Aktualisieren</button>
@@ -33,7 +33,7 @@ button{cursor:pointer}button:disabled{cursor:wait;opacity:.6}
 <h2>Social-Media-Kandidaten prüfen</h2>
 <p>Links aus Parteiseiten und externen Quellen sind bis zur manuellen Freigabe unbestätigt.</p>
 <label>Suche <input id="review-search" type="search" placeholder="Mitglied, Plattform, URL"></label><label>Status <select id="review-status"><option value="all">Alle</option><option value="pending">Ungeprüft</option><option value="approved">Bestätigt</option><option value="rejected">Verworfen</option></select></label><label>Plattform <select id="review-platform"><option value="all">Alle</option></select></label><label>Sortieren <select id="review-sort"><option value="member">Mitglied</option><option value="platform">Plattform</option><option value="status">Status</option></select></label><button id="review-load" type="button">Kandidaten laden</button><p id="review-stats" role="status"></p><p id="review-count"></p>
-<div id="review-list" aria-live="polite"></div><h2>Link-Qualitätsprüfung</h2><p>Ungültige oder mehrfach zugeordnete Profile werden nur markiert, nicht gelöscht.</p><button id="quality-load" type="button">Links prüfen</button><p id="quality-summary" role="status"></p><div id="quality-issues"></div><h3>Online-Erreichbarkeit</h3><p>Prüft maximal 100 unterschiedliche Links pro Lauf. Social-Media-Plattformen können automatisierte Zugriffe blockieren.</p><button id="live-check" type="button">Erreichbarkeit prüfen</button><p id="live-status" role="status"></p><div id="live-results"></div><h3>Automatische Prüfung</h3><p id="schedule-status" role="status"></p><h3>Kennzahlen und Trends</h3><p>Aktuelle Bearbeitungsstände und Entwicklung der technischen Auffälligkeiten pro Prüflauf.</p><label>Zeitraum <select id="metrics-limit"><option value="5">5 Prüfläufe</option><option value="10" selected>10 Prüfläufe</option><option value="20">20 Prüfläufe</option><option value="30">30 Prüfläufe</option></select></label><button id="metrics-load" type="button">Kennzahlen laden</button><button id="metrics-export" type="button">Prüfstatistiken als CSV</button><div id="metrics-summary" class="metric-grid" role="status"></div><svg id="metrics-chart" viewBox="0 0 760 280" role="img" aria-label="Trend technischer Warnmeldungen"></svg><p id="metrics-note"></p><h3>Warnmeldungen</h3><p>Aktuelle Auffälligkeiten der letzten gespeicherten Prüfung, priorisiert und ohne automatische Profiländerung.</p><label>Suche <input id="alert-search" type="search" placeholder="Mitglied, Plattform, URL, Begründung"></label><label>Plattform <input id="alert-platform" type="search" placeholder="z. B. Instagram"></label><label>Prüfdatum von <input id="alert-date-from" type="date"></label><label>Prüfdatum bis <input id="alert-date-to" type="date"></label><p>Der Zeitraum bezieht sich auf das Datum der letzten Prüfung, nicht auf frühere Warnmeldungen.</p><label>Priorität <select id="alert-severity"><option value="all">Alle</option><option value="high">Hoch</option><option value="medium">Mittel</option><option value="low">Niedrig</option></select></label><label><input id="alert-new-only" type="checkbox"> Nur neue Probleme</label><label>Bearbeitung <select id="alert-review-filter"><option value="all">Alle</option><option value="open">Offen</option><option value="in_progress">In Bearbeitung</option><option value="resolved">Erledigt</option><option value="ignored">Ignoriert</option></select></label><button id="alerts-load" type="button">Warnmeldungen laden</button><button id="alerts-export" type="button">Warnmeldungen als CSV</button><p id="alerts-summary" role="status"></p><div id="alerts-results"></div><h3>Historisches Warnmeldungsarchiv</h3><p>Technische Auffälligkeiten aus bis zu 30 gespeicherten Prüfläufen. Frühere manuelle Bearbeitungsstände werden nicht rekonstruiert.</p><label>Archiv-Suche <input id="archive-search" type="search" placeholder="Mitglied, Plattform, URL"></label><label>Plattform <input id="archive-platform" type="search" placeholder="z. B. Instagram"></label><label>Priorität <select id="archive-severity"><option value="all">Alle</option><option value="high">Hoch</option><option value="medium">Mittel</option><option value="low">Niedrig</option></select></label><label>Von <input id="archive-from" type="date"></label><label>Bis <input id="archive-to" type="date"></label><label><input id="archive-new" type="checkbox"> Nur neue Probleme</label><label>Prüfläufe <select id="archive-limit"><option value="5">5</option><option value="10">10</option><option value="20">20</option><option value="30" selected>30</option></select></label><button id="archive-load" type="button">Archiv durchsuchen</button><button id="archive-export" type="button">Archiv als CSV</button><p id="archive-summary" role="status"></p><div id="archive-results"></div><h3>Prüfverlauf und Veränderungen</h3><button id="history-load" type="button">Prüfverlauf laden</button><p id="history-summary" role="status"></p><div id="history-results"></div>
+<div id="review-list" aria-live="polite"></div><h2>Link-Qualitätsprüfung</h2><p>Ungültige oder mehrfach zugeordnete Profile werden nur markiert, nicht gelöscht.</p><button id="quality-load" type="button">Links prüfen</button><p id="quality-summary" role="status"></p><div id="quality-issues"></div><h3>Online-Erreichbarkeit</h3><p>Prüft maximal 100 unterschiedliche Links pro Lauf. Social-Media-Plattformen können automatisierte Zugriffe blockieren.</p><button id="live-check" type="button">Erreichbarkeit prüfen</button><p id="live-status" role="status"></p><div id="live-results"></div><h3>Automatische Prüfung</h3><p id="schedule-status" role="status"></p><h3>Kennzahlen und Trends</h3><p>Aktuelle Bearbeitungsstände und Entwicklung der technischen Auffälligkeiten pro Prüflauf.</p><label>Zeitraum <select id="metrics-limit"><option value="5">5 Prüfläufe</option><option value="10" selected>10 Prüfläufe</option><option value="20">20 Prüfläufe</option><option value="30">30 Prüfläufe</option></select></label><button id="metrics-load" type="button">Kennzahlen laden</button><button id="metrics-export" type="button">Prüfstatistiken als CSV</button><div id="metrics-summary" class="metric-grid" role="status"></div><svg id="metrics-chart" viewBox="0 0 760 280" role="img" aria-label="Trend technischer Warnmeldungen"></svg><p id="metrics-note"></p><h3>Warnmeldungen</h3><p>Aktuelle Auffälligkeiten der letzten gespeicherten Prüfung, priorisiert und ohne automatische Profiländerung.</p><label>Suche <input id="alert-search" type="search" placeholder="Mitglied, Plattform, URL, Begründung"></label><label>Plattform <input id="alert-platform" type="search" placeholder="z. B. Instagram"></label><label>Prüfdatum von <input id="alert-date-from" type="date"></label><label>Prüfdatum bis <input id="alert-date-to" type="date"></label><p>Der Zeitraum bezieht sich auf das Datum der letzten Prüfung, nicht auf frühere Warnmeldungen.</p><label>Priorität <select id="alert-severity"><option value="all">Alle</option><option value="high">Hoch</option><option value="medium">Mittel</option><option value="low">Niedrig</option></select></label><label><input id="alert-new-only" type="checkbox"> Nur neue Probleme</label><label>Bearbeitung <select id="alert-review-filter"><option value="all">Alle</option><option value="open">Offen</option><option value="in_progress">In Bearbeitung</option><option value="resolved">Erledigt</option><option value="ignored">Ignoriert</option></select></label><button id="alerts-load" type="button">Warnmeldungen laden</button><button id="alerts-export" type="button">Warnmeldungen als CSV</button><p id="alerts-summary" role="status"></p><div id="alerts-results"></div><h3>Alte Facebook-Bearbeitungen prüfen</h3><p>Alte Facebook-Profilentscheidungen ohne Profil-ID werden niemals automatisch zugeordnet. Eine neue Entscheidung muss für ein bestimmtes aktuelles Profil ausdrücklich bestätigt werden; die alte Entscheidung und Historie bleiben erhalten.</p><button id="legacy-load" type="button">Alte Einträge prüfen</button><p id="legacy-summary" role="status"></p><div id="legacy-results"></div><h3>Historisches Warnmeldungsarchiv</h3><p>Technische Auffälligkeiten aus bis zu 30 gespeicherten Prüfläufen. Frühere manuelle Bearbeitungsstände werden nicht rekonstruiert.</p><label>Archiv-Suche <input id="archive-search" type="search" placeholder="Mitglied, Plattform, URL"></label><label>Plattform <input id="archive-platform" type="search" placeholder="z. B. Instagram"></label><label>Priorität <select id="archive-severity"><option value="all">Alle</option><option value="high">Hoch</option><option value="medium">Mittel</option><option value="low">Niedrig</option></select></label><label>Von <input id="archive-from" type="date"></label><label>Bis <input id="archive-to" type="date"></label><label><input id="archive-new" type="checkbox"> Nur neue Probleme</label><label>Prüfläufe <select id="archive-limit"><option value="5">5</option><option value="10">10</option><option value="20">20</option><option value="30" selected>30</option></select></label><button id="archive-load" type="button">Archiv durchsuchen</button><button id="archive-export" type="button">Archiv als CSV</button><p id="archive-summary" role="status"></p><div id="archive-results"></div><h3>Prüfverlauf und Veränderungen</h3><button id="history-load" type="button">Prüfverlauf laden</button><p id="history-summary" role="status"></p><div id="history-results"></div>
 </section>
 <p id="message" role="alert"></p>
 <script>
@@ -269,6 +269,185 @@ for(const id of ["alert-search","alert-platform"]){
   $(id).addEventListener("input",()=>{clearTimeout(alertSearchTimer);alertSearchTimer=setTimeout(loadAlerts,250);});
 }
 let alertSearchTimer=null;
+async function loadLegacyFacebook(){
+  const container=$("legacy-results");container.replaceChildren();
+  try{
+    const data=await request("live-check/facebook-legacy?language="+encodeURIComponent($("language").value));
+    $("legacy-summary").textContent=data.count+" alte Facebook-Einträge zur manuellen Prüfung.";
+    for(const item of data.items){
+      const section=document.createElement("section"),heading=document.createElement("p");
+      heading.textContent="Mitglied "+item.person_number+" · "+item.legacy_url+
+        " · Bisher: "+item.state+" · "+item.reason+
+        " · "+item.candidate_urls.length+" aktuelle Kandidaten";
+      section.append(heading);
+      for(const url of item.candidate_urls){
+        const row=document.createElement("div"),label=document.createElement("p");
+        label.textContent=url;
+        const state=document.createElement("select");
+        for(const [value,name] of [["open","Offen"],["in_progress","In Bearbeitung"],
+                                    ["resolved","Erledigt"],["ignored","Ignoriert"]]){
+          const opt=document.createElement("option");opt.value=value;opt.textContent=name;state.append(opt);
+        }
+        state.value=item.state;
+        const reason=document.createElement("input");reason.type="text";reason.maxLength=1000;
+        reason.placeholder="Begründung für die eindeutige Zuordnung";
+        const button=document.createElement("button");button.type="button";button.textContent="Entscheidung übernehmen";
+        button.addEventListener("click",async()=>{
+          if(!reason.value.trim()){ $("message").textContent="Bitte die Zuordnung begründen.";return; }
+          if(!confirm("Diese Entscheidung ausdrücklich nur für "+url+" speichern? Der alte Eintrag bleibt bestehen."))return;
+          button.disabled=true;
+          try{
+            await request("live-check/facebook-legacy/review",{method:"POST",headers,
+              body:JSON.stringify({language:$("language").value,person_number:item.person_number,
+                platform:item.platform,legacy_url:item.legacy_url,target_url:url,
+                state:state.value,reason:reason.value})});
+            await loadLegacyFacebook();await loadAlerts();
+          }catch(err){$("message").textContent=err.message;button.disabled=false;}
+        });
+        row.append(label,state,reason,button);section.append(row);
+      }
+      if(!item.candidate_urls.length){
+        const note=document.createElement("p");
+        note.textContent="Kein aktueller auffälliger Link vorhanden. Keine automatische Zuordnung.";
+        section.append(note);
+      }
+      container.append(section);
+    }
+    if(!data.count)container.textContent="Keine alten Facebook-Einträge gefunden.";
+  }catch(err){$("legacy-summary").textContent="Alte Facebook-Einträge konnten nicht geladen werden."; $("message").textContent=err.message;}
+}
+$("legacy-load").addEventListener("click",loadLegacyFacebook);
+async function loadDataHealth(){
+  const cards=$("health-cards"),warnings=$("health-warnings");
+  cards.replaceChildren();warnings.replaceChildren();
+  try{
+    const params=new URLSearchParams({language:$("language").value,stale_hours:$("health-threshold").value});
+    const data=await request("data-health?"+params);
+    const values=[["Mitglieder mit Profilen",data.members_with_profiles],
+      ["Gespeicherte Profil-Links",data.verified_links],
+      ["Ungültige Links",data.quality.invalid],
+      ["Duplikat-Einträge",data.quality.duplicates],
+      ["Aktive Warnmeldungen",data.alerts.active],
+      ["Kritisch aktiv",data.alerts.high_active],
+      ["Alte Facebook-Zuordnungen",data.legacy_facebook]];
+    for(const [label,value] of values){
+      const card=document.createElement("div"),name=document.createElement("span"),number=document.createElement("strong");
+      name.textContent=label;number.textContent=String(value);card.append(name,number);cards.append(card);
+    }
+    $("health-check").textContent="Letzte Online-Prüfung: "+(data.last_check_at||"Keine")+
+      (data.last_check_age_hours===null?"":" · vor "+data.last_check_age_hours+" Stunden")+
+      " · Warnschwelle: "+data.stale_threshold_hours+" Stunden";
+    for(const item of data.warnings){
+      const row=document.createElement("p");row.textContent="Hinweis: "+item.message;warnings.append(row);
+    }
+    if(!data.warnings.length)warnings.textContent="Keine Auffälligkeiten in den ausgewerteten Daten.";
+  }catch(err){$("health-check").textContent="Systemzustand konnte nicht geladen werden."; $("message").textContent=err.message;}
+}
+$("health-load").addEventListener("click",loadDataHealth);
+$("health-threshold").addEventListener("change",loadDataHealth);
+$("language").addEventListener("change",loadDataHealth);
+async function loadQualityTrends(){
+  const chart=$("quality-trend-chart"),out=$("quality-trend-results");
+  chart.replaceChildren();out.replaceChildren();
+  try{
+    const params=new URLSearchParams({language:$("language").value,limit:$("quality-trend-limit").value});
+    const data=await request("data-health/trends?"+params);
+    const ns="http://www.w3.org/2000/svg",points=data.trend;
+    const add=(tag,attrs,content)=>{
+      const el=document.createElementNS(ns,tag);
+      for(const [key,value] of Object.entries(attrs))el.setAttribute(key,String(value));
+      if(content!==undefined)el.textContent=content;
+      chart.append(el);return el;
+    };
+    if(!points.length){out.textContent="Noch keine Prüfläufe.";return;}
+    const x=i=>55+(points.length===1?325:i*650/(points.length-1)),y=v=>235-v*1.9;
+    add("line",{x1:55,y1:235,x2:720,y2:235,stroke:"#64748b"});
+    add("line",{x1:55,y1:45,x2:55,y2:235,stroke:"#64748b"});
+    add("text",{x:5,y:50,fill:"#334155"},"100 %");
+    add("text",{x:25,y:239,fill:"#334155"},"0 %");
+    for(const [field,color,label] of [["reachable_percent","#15803d","Erreichbar"],["flagged_percent","#dc2626","Auffällig"]]){
+      let coords=[];
+      const flush=()=>{
+        if(coords.length>1)add("polyline",{points:coords.join(" "),fill:"none",stroke:color,"stroke-width":3});
+        coords=[];
+      };
+      points.forEach((p,i)=>{
+        if(p[field]===null){flush();return;}
+        coords.push(x(i)+","+y(p[field]));
+        const dot=add("circle",{cx:x(i),cy:y(p[field]),r:4,fill:color});
+        const title=document.createElementNS(ns,"title");
+        title.textContent=p.checked_at+" · "+label+": "+p[field]+" %";dot.append(title);
+      });
+      flush();
+    }
+    add("text",{x:55,y:273,fill:"#15803d"},"Grün: erreichbar");
+    add("text",{x:270,y:273,fill:"#dc2626"},"Rot: auffällig");
+    for(const p of points){
+      const line=document.createElement("p");
+      line.textContent=p.checked_at+" · "+p.checked+" geprüft · erreichbar: "+
+        (p.reachable_percent===null?"–":p.reachable_percent+" %")+
+        " · Auffällig: "+p.flagged+" · ungültig: "+(p.invalid??"nicht erfasst")+
+        " · Duplikate: "+(p.duplicates??"nicht erfasst")+
+        (p.truncated?" · Prüflimit erreicht":"");
+      out.append(line);
+    }
+  }catch(err){out.textContent="Qualitätstrend konnte nicht geladen werden: "+err.message;}
+}
+$("quality-trend-load").addEventListener("click",loadQualityTrends);
+$("quality-trend-limit").addEventListener("change",loadQualityTrends);
+$("language").addEventListener("change",loadQualityTrends);
+async function loadRegressions(){
+  const out=$("regression-results");out.replaceChildren();
+  try{
+    const params=new URLSearchParams({
+      language:$("language").value,limit:$("quality-trend-limit").value,
+      reachability_drop:$("regression-reach").value,
+      flagged_rise:$("regression-flagged").value,
+      duplicate_increase:$("regression-duplicates").value,
+      invalid_increase:$("regression-invalid").value
+    });
+    const data=await request("data-health/regressions?"+params);
+    const summary=document.createElement("p");
+    summary.textContent=data.runs+" Prüfläufe · "+data.warnings.length+
+      " Verschlechterungen · "+data.latest_warnings.length+" im letzten Prüflauf";
+    out.append(summary);
+    const names={reachability_drop:"Erreichbarkeit gesunken",flagged_rise:"Auffälligkeiten gestiegen",
+      duplicate_increase:"Duplikate gestiegen",invalid_increase:"Ungültige Links gestiegen"};
+    for(const item of data.warnings){
+      const row=document.createElement("p");
+      row.textContent=item.checked_at+" · "+names[item.code]+": "+item.previous+
+        " → "+item.current+" (Änderung: "+item.delta+")"+
+        (item.sample_changed?" · Unterschiedliche Anzahl geprüfter Links":"")+
+        (item.truncated?" · Mindestens ein Prüflauf war begrenzt":"");
+      out.append(row);
+    }
+    if(!data.warnings.length){
+      const p=document.createElement("p");p.textContent="Keine Verschlechterung über den Schwellenwerten erkannt.";out.append(p);
+    }
+  }catch(err){out.textContent="Qualitätsvergleich fehlgeschlagen: "+err.message;}
+}
+$("regression-load").addEventListener("click",loadRegressions);
+$("language").addEventListener("change",loadRegressions);
+async function loadDiscoveryWorklist(){
+  const container=$("discovery-results");container.replaceChildren();
+  try{
+    const params=new URLSearchParams({language:$("language").value,
+      platform:$("discovery-platform").value,limit:"100"});
+    const data=await request("social-discovery/worklist?"+params);
+    $("discovery-summary").textContent=data.total+" fehlende Profile zur Recherche · "+
+      data.items.length+" angezeigt. Treffer vor Freigabe persönlich prüfen.";
+    for(const item of data.items){
+      const row=document.createElement("p"),link=document.createElement("a");
+      link.href=item.search_url;link.target="_blank";link.rel="noopener noreferrer";
+      link.textContent=item.name+" · "+item.platform+" · Websuche öffnen";
+      row.append(link);container.append(row);
+    }
+    if(!data.items.length)container.textContent="Keine Rechercheaufträge vorhanden. Falls noch keine Mitgliederdaten gespeichert sind, zuerst Profile aktualisieren.";
+  }catch(err){$("discovery-summary").textContent="Rechercheaufträge konnten nicht geladen werden: "+err.message;}
+}
+$("discovery-load").addEventListener("click",loadDiscoveryWorklist);
+$("discovery-platform").addEventListener("change",loadDiscoveryWorklist);
+$("language").addEventListener("change",loadDiscoveryWorklist);
 function archiveParams(){
   return new URLSearchParams({language:$("language").value,limit:$("archive-limit").value,
     search:$("archive-search").value,platform:$("archive-platform").value,

@@ -215,6 +215,10 @@ async def _execute_live_check(language):
         apply_decisions(snapshot, language)
         profiles = snapshot.get(language, {}).get("profiles", {})
         report = await check_links(profiles, verified_social_url)
+        from .social_quality import audit_profiles
+        quality = audit_profiles(profiles, verified_social_url)
+        report["quality_snapshot"] = {"checked": quality["checked"],
+            "invalid": quality["invalid"], "duplicates": quality["duplicates"]}
         from .social_check_history import save_report
         save_report(language, report)
         _live_job.update(state="completed", **report)
@@ -395,3 +399,78 @@ async def admin_alert_archive_csv(request: Request, language: str = "DE", limit:
     return Response(content, media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": f'attachment; filename="social-archive-{language}.csv"',
                              "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+
+
+@router.get("/live-check/facebook-legacy")
+async def admin_facebook_legacy(request: Request, language: str = "DE"):
+    _require(request)
+    from .social_legacy_triage import legacy_candidates
+    try:
+        return legacy_candidates(language)
+    except ValueError:
+        raise HTTPException(422, "Invalid language")
+
+
+@router.post("/live-check/facebook-legacy/review")
+async def admin_facebook_legacy_review(request: Request):
+    _require(request)
+    if not _same_origin(request):
+        raise HTTPException(403, "Same-origin request required")
+    data = await request.json()
+    expected = {"language", "person_number", "platform", "legacy_url",
+                "target_url", "state", "reason"}
+    if not isinstance(data, dict) or set(data) != expected:
+        raise HTTPException(422, "Invalid legacy review")
+    from .social_legacy_triage import resolve_legacy
+    try:
+        return resolve_legacy(**data)
+    except ValueError:
+        raise HTTPException(422, "Invalid legacy review or target conflict")
+
+
+@router.get("/data-health")
+async def admin_data_health(request: Request, language: str = "DE", stale_hours: int = 48):
+    _require(request)
+    from .social_data_health import data_health
+    try:
+        return data_health(language, stale_hours=stale_hours)
+    except ValueError:
+        raise HTTPException(422, "Invalid data health query")
+
+
+@router.get("/data-health/trends")
+async def admin_data_health_trends(request: Request, language: str = "DE", limit: int = 10):
+    _require(request)
+    from .social_quality_trends import quality_trends
+    try:
+        return quality_trends(language, limit=limit)
+    except ValueError:
+        raise HTTPException(422, "Invalid quality trend query")
+
+
+@router.get("/data-health/regressions")
+async def admin_data_health_regressions(
+    request: Request, language: str = "DE", limit: int = 10,
+    reachability_drop: int = 10, flagged_rise: int = 10,
+    duplicate_increase: int = 1, invalid_increase: int = 1,
+):
+    _require(request)
+    from .social_quality_regressions import quality_regressions
+    try:
+        return quality_regressions(
+            language, limit=limit, reachability_drop=reachability_drop,
+            flagged_rise=flagged_rise, duplicate_increase=duplicate_increase,
+            invalid_increase=invalid_increase)
+    except ValueError:
+        raise HTTPException(422, "Invalid regression query")
+
+
+@router.get("/social-discovery/worklist")
+async def admin_social_discovery_worklist(request: Request, language: str = "DE",
+                                          limit: int = 50, platform: str = "all"):
+    _require(request)
+    from .social_discovery_worklist import discovery_worklist
+    try:
+        return discovery_worklist(language, limit=limit, platform=platform)
+    except ValueError:
+        raise HTTPException(422, "Invalid social discovery query")

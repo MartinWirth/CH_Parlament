@@ -145,3 +145,62 @@ def discover_party_review_candidates(party_diagnostic, member_names, verified_so
                 "reason": entry.get("reason", "identity_not_confirmed"),
             })
     return result
+
+
+def discover_personal_homepage_review_candidates(homepage_report, member_names,
+                                                 homepage_urls, verified_social_url,
+                                                 checked_at=None):
+    """Collect identity-unconfirmed links from already scanned member homepages.
+
+    Sources must be the parliament-supplied homepage or an HTTPS same-host
+    subpage. Never treat a discovered link as a verified personal account.
+    """
+    checked_at = checked_at or _utc_now()
+    result, seen = {}, set()
+    details = homepage_report.get("missing_details", [])
+    if not isinstance(details, list):
+        return result
+    for detail in details[:500]:
+        if not isinstance(detail, dict):
+            continue
+        number = str(detail.get("person_number", ""))
+        homepage = homepage_urls.get(number)
+        if not homepage or detail.get("homepage") != homepage:
+            continue
+        if detail.get("name") != member_names.get(number):
+            continue
+        try:
+            origin = urlparse(homepage)
+            if origin.scheme != "https" or not origin.hostname or origin.username or origin.password or origin.port not in (None, 443):
+                continue
+        except (ValueError, UnicodeError):
+            continue
+        entries = detail.get("unverified_personal_candidates", [])
+        if not isinstance(entries, list):
+            continue
+        for entry in entries[:30]:
+            if not isinstance(entry, dict) or entry.get("status") != "requires_identity_verification":
+                continue
+            url, source = entry.get("url"), entry.get("source_page")
+            if not isinstance(url, str) or not isinstance(source, str):
+                continue
+            try:
+                page = urlparse(source)
+                if (page.scheme != "https" or page.hostname != origin.hostname or
+                        page.username or page.password or page.port not in (None, 443)):
+                    continue
+                platform = verified_social_url(url)
+            except (ValueError, UnicodeError):
+                continue
+            if not platform or (number, url) in seen:
+                continue
+            seen.add((number, url))
+            result.setdefault(number, []).append({
+                "platform": platform, "url": url,
+                "source_type": "parliament_listed_personal_homepage",
+                "source_url": source, "checked_at": checked_at,
+                "verification_status": "requires_identity_verification",
+                "auto_accept": False,
+                "reason": entry.get("classification_reason", "identity_not_confirmed"),
+            })
+    return result

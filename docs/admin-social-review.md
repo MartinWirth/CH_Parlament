@@ -78,3 +78,66 @@ Dieser PR repariert ausserdem versehentlich als Text gespeicherte `\\n`-Sequenze
 ## Facebook-Profilidentität in URL-Normalisierung
 
 Bei Facebook-Links der Form `https://www.facebook.com/profile.php?id=123` ist `id` ein identitätsbestimmender Parameter. Er bleibt nun bei der kanonischen URL erhalten, während gewöhnliche Tracking-Parameter entfernt werden. Fehlende, leere oder mehrfach angegebene `id`-Werte werden für diese URL-Form als ungültig behandelt. Andere Profilpfade behalten ihr bisheriges Normalisierungsverhalten. Dadurch werden unterschiedliche Facebook-Accounts bei Duplikaterkennung, Prüfvergleich und Bearbeitungszuordnung nicht länger verwechselt. **Bestehende Datenbank-Schlüssel werden nicht automatisch migriert**: Frühere Bearbeitungsentscheidungen zu solchen Links können daher vorübergehend unter dem alten, zu groben Schlüssel gespeichert bleiben und müssen bei Bedarf manuell erneut zugeordnet werden. Es werden keine verifizierten Profile gelöscht oder geändert.
+
+
+## Alte Facebook-Bearbeitungsentscheidungen prüfen
+
+Vor PR #18 wurden bei Facebook-URLs der Form `profile.php?id=...` die Profil-IDs aus dem internen Bearbeitungsschlüssel entfernt. Deshalb können alte Entscheidungen mehrere unterschiedliche Accounts betreffen. Unter **Alte Facebook-Bearbeitungen prüfen** zeigt das Admin-Dashboard solche gespeicherten Schlüssel und die dazu passenden aktuellen auffälligen Links. Die API `GET /admin/live-check/facebook-legacy?language=DE` ist nur mit Admin-Sitzung erreichbar.
+
+Ein Administrator kann **pro konkretem aktuellen Link** einen neuen Bearbeitungsstand und eine eigene Begründung eingeben und die Übernahme ausdrücklich bestätigen. `POST /admin/live-check/facebook-legacy/review` benötigt Admin-Sitzung, Same-Origin und Aktionsheader. Vor dem Speichern werden die alte Entscheidung, die exakte aktuelle Linkidentität und ein eventuell schon vorhandener Zielentscheid geprüft. **Es gibt keine automatische Migration**. Alte Entscheidungen und deren Audit-Ereignisse bleiben unverändert; der neue Entscheid erhält einen eigenen Audit-Eintrag mit Quelle `legacy_manual_review`. Die alten Schlüssel bleiben als historische Datensätze sichtbar, auch nach einer manuellen Übernahme. Für nicht mehr aktuelle Links ist keine Übernahme über diesen Dialog möglich. Die verifizierten Social-Media-Profile werden nicht geändert.
+
+
+## Datenqualität und Systemzustand
+
+Das Admin-Dashboard zeigt eine zusammengefasste, **rein lesende** Datenqualitätsübersicht pro ausgewählter Sprache. `GET /admin/data-health?language=DE&stale_hours=48` erfordert eine gültige Admin-Sitzung. Angezeigt werden Mitglieder mit gespeicherten Profilen, Anzahl gespeicherter Profil-Links, ungültige Links, mehrfach zugeordnete Links, aktuelle aktive und kritische Warnmeldungen, alte Facebook-Bearbeitungsschlüssel sowie Zeitpunkt und Alter der letzten gespeicherten Online-Prüfung. Die Warnschwelle ist zwischen 1 und 720 Stunden konfigurierbar (im Dashboard 24, 48 oder 168 Stunden).
+
+Fehlende oder veraltete Prüfläufe, ungültige Links, Duplikate, aktive Warnmeldungen und alte Facebook-Zuordnungen erzeugen Hinweise. Die Zählwerte stammen aus dem gespeicherten Snapshot und den verfügbaren Prüfergebnissen; die Online-Prüfung ist auf maximal 100 Links begrenzt. **Keine Gesamtgarantie über die Erreichbarkeit aller Links**. Diese Übersicht startet keine neuen Prüfungen, verändert keine Profile und löst keine Warnmeldungen automatisch auf.
+
+
+## Datenqualität im Zeitverlauf
+
+`GET /admin/data-health/trends?language=DE&limit=10` ist nur mit Admin-Sitzung zugänglich und liefert bis zu 30 gespeicherte Prüfläufe chronologisch. Pro Lauf werden geprüfte, erreichbare und technisch auffällige Links sowie die Anteile in Prozent ausgewiesen. Das Admin-Dashboard zeigt die Quoten als Liniengrafik und die einzelnen Prüfläufe mit Qualitätswerten. Bei null geprüften Links sind Quoten `null` statt 0 %.
+
+Bei **neuen** Live-Prüfläufen wird zusätzlich die momentane Offline-Qualität des gespeicherten Profilsnapshots (Anzahl Links, ungültige Links, Duplikat-Einträge) mit dem technischen Prüfbericht gespeichert. Frühere Berichte besitzen diese Momentaufnahme nicht; ihre Werte bleiben `null` und werden **nicht** aus dem heutigen Datenbestand rekonstruiert. Historische manuelle Bearbeitungsstände werden nicht rekonstruiert; die technische Auffälligkeit ist nicht mit einem offenen Bearbeitungsfall gleichzusetzen. Da ein Lauf höchstens 100 unterschiedliche Links prüfen kann, gelten Prozentwerte nur für die jeweils tatsächlich geprüften Links und sind bei veränderter Stichprobe eingeschränkt vergleichbar. Die Funktion verändert keine Profile.
+
+
+## Automatische Erkennung von Qualitätsverschlechterungen
+
+Der geschützte, rein lesende Endpunkt `GET /admin/data-health/regressions` vergleicht bis zu 30 aufeinanderfolgende gespeicherte Prüfläufe. Parameter: `language`, `limit` (2–30), `reachability_drop` und `flagged_rise` (je 0–100 Prozentpunkte) sowie `duplicate_increase` und `invalid_increase` (je 0–10000 Einträge). Standardwerte: 10, 10, 1, 1. Die Schwellenwerte sind im Admin-Dashboard einstellbar.
+
+Die Antwort enthält alle Verschlechterungen innerhalb des ausgewählten Zeitfensters sowie gesondert die Verschlechterungen des jüngsten Prüflaufs. Fehlende historische Offline-Qualitätsdaten werden nicht als null Fehler interpretiert. Die Erreichbarkeitsquote gilt nur für die im jeweiligen Lauf geprüften Links; geänderte Stichprobengrössen und begrenzte Läufe werden markiert. Die Funktion verschickt keine Benachrichtigungen, startet keine Prüfungen und verändert keine Profile.
+
+
+## Persönliche Social-Media-Profile gezielt recherchieren
+
+Die Admin-Oberfläche bietet eine priorisierte Rechercheliste für fehlende persönliche Profile auf LinkedIn, Instagram, Facebook, X und YouTube. `GET /admin/social-discovery/worklist?language=DE&platform=all&limit=50` ist nur mit Admin-Sitzung zugänglich. Die Liste nutzt die beim nächsten Social-Profil-Refresh gespeicherten aktuellen Mitgliedsnamen und Personennummern. Bereits zugeordnete und zur Prüfung vorgemerkte Plattformen werden übersprungen; Mitglieder mit besonders geringer Profilabdeckung erscheinen zuerst. Die Suchlinks führen zu einer gezielten externen Websuche.
+
+**Sicherheitsgrenze:** Suchlinks sind Recherchehilfen und keine gefundenen, verifizierten Social-Media-Accounts. Treffer dürfen nicht automatisch Personen zugeordnet werden. Identität und Quelle müssen vor dem bestehenden manuellen Freigabeprozess geprüft werden. Es werden weder Profile verändert noch Suchergebnisse automatisch übernommen. Ältere Snapshots ohne `member_names` liefern bis zum nächsten Refresh keine Rechercheaufträge.
+
+
+## Automatische Kandidatensuche auf vertrauenswürdigen persönlichen Webseiten
+
+Bei einem autorisierten Profil-Refresh werden bereits untersuchte, vom Parlament angegebene persönliche Homepages und höchstens zwei dazugehörige Unterseiten ausgewertet. Links, deren Zuordnung zur Person nicht sicher bestätigt ist, werden nun aus den vorhandenen Scan-Diagnosen in die **manuelle Prüfliste** übernommen. Voraussetzung sind die exakte Personennummer und der aktuelle Name, die unveränderte parlamentarisch gelistete Homepage, eine HTTPS-Quellseite auf demselben Host und ein gültiger Social-Media-Link. Organisationsaccounts werden ausgeschlossen; doppelte Kandidaten werden nicht erneut aufgenommen. Die Debug-Diagnose `review_candidates.personal_homepage_discovered` zeigt die Anzahl.
+
+**Keine automatische Freigabe:** Die gefundenen Links sind ausschliesslich Recherchekandidaten (`requires_identity_verification`, `auto_accept: false`). Es erfolgen keine zusätzlichen Netzwerkanfragen, keine ungeprüfte Übernahme in die Mitgliederprofile und keine Änderung an bestehenden Freigabeentscheidungen. Bei deaktiviertem Homepage-Scanning oder wiederverwendeten alten Snapshots entstehen keine neuen Kandidaten, bis die Seiten erneut untersucht werden.
+
+
+## Regionale Partei- und Kandidatenprofile als zusätzliche Quellen
+
+Die optionale Datei `social_regional_party_sources.json` (oder `SOCIAL_REGIONAL_PARTY_SOURCES_PATH`) enthält eine Liste manuell geprüfter offizieller Personenprofilseiten, beispielsweise:
+
+```json
+[
+  {"person_number": "1234", "name": "Vorname Nachname",
+   "profile_url": "https://zh.glp.swiss/personen/beispiel", "verified": true}
+]
+```
+
+Die Werte sind **nur Formatbeispiele**, keine belegten Personenprofile. Pro Eintrag werden aktuelle Personennummer, vollständiger Name, `verified: true`, HTTPS und eine offizielle Parteidomain (einschliesslich kantonaler Subdomains) verlangt. Maximal 100 Quellen werden pro Refresh berücksichtigt. Der bestehende sichere Homepage-Scanner verarbeitet die Webseiten nur, wenn `ENABLE_EXTERNAL_HOMEPAGE_SCAN=1` aktiviert ist. Ausgelesene Social-Media-Links werden ausschliesslich in die manuelle Prüfliste eingetragen und niemals automatisch freigegeben. Ohne konfigurierte Quellen erfolgt kein zusätzlicher Netzwerkzugriff. Diagnose: `debug.review_candidates.regional_party_discovery`.
+
+
+### Initiale geprüfte kantonale Quellen
+
+`social_regional_party_sources.json` enthält vier anhand offizieller GLP-Zürich-Personenseiten und parlamentarischer Personennummern geprüfte Quellseiten: Martin Bäumle (2585), Patrick Hässig (11507), Tiana Angelina Moser (2700), Barbara Schaffner (3179). Diese Einträge belegen die **Personenseiten**, nicht die Identität verlinkter Social-Media-Konten. Letztere bleiben ausschliesslich manuelle Prüfkandidaten.
+
+Die Konfiguration wird beim nächsten autorisierten Social-Profil-Refresh berücksichtigt, sofern `ENABLE_EXTERNAL_HOMEPAGE_SCAN=1` in der Laufzeitumgebung gesetzt ist. Ohne diese Einstellung erfolgt kein externer Scan. Die tatsächliche Zahl neu gefundener Kandidaten ist erst nach einem Refresh bekannt. Weitere Quellen nur mit eindeutig belegter offizieller Personenseite und stabiler Parlaments-Personennummer ergänzen.

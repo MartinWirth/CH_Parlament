@@ -19,7 +19,8 @@ import xml.etree.ElementTree as ET
 from urllib.parse import urlparse, urlunparse
 import httpx
 from .public_https import PublicHTTPSClient
-from .social_evidence import evidence_for_sources, load_review_candidates, discover_party_review_candidates
+from .social_evidence import (evidence_for_sources, load_review_candidates, discover_party_review_candidates,
+                              discover_personal_homepage_review_candidates)
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -1709,6 +1710,29 @@ async def _run_social_profiles_refresh(language, force):
             if entry["url"] not in known:
                 existing.append(entry)
                 known.add(entry["url"])
+    homepage_discovered = discover_personal_homepage_review_candidates(
+        homepage_report, member_names, current_homepages, verified_social_url,
+        now.isoformat())
+    for number, entries in homepage_discovered.items():
+        existing = review_candidates.setdefault(number, [])
+        known = {item["url"] for item in existing}
+        for entry in entries:
+            if entry["url"] not in known:
+                existing.append(entry)
+                known.add(entry["url"])
+    review_diagnostic["personal_homepage_discovered"] = sum(
+        len(entries) for entries in homepage_discovered.values())
+    from .social_regional_discovery import discover_regional_party_candidates
+    regional_discovered, regional_diagnostic = await discover_regional_party_candidates(
+        member_names, verified_social_url, checked_at=now.isoformat())
+    for number, entries in regional_discovered.items():
+        existing = review_candidates.setdefault(number, [])
+        known = {item["url"] for item in existing}
+        for entry in entries:
+            if entry["url"] not in known:
+                existing.append(entry)
+                known.add(entry["url"])
+    review_diagnostic["regional_party_discovery"] = regional_diagnostic
     review_diagnostic["official_party_discovered"] = sum(
         len(items) for items in discovered_review.values())
     review_diagnostic["total_for_review"] = sum(
@@ -1732,7 +1756,7 @@ async def _run_social_profiles_refresh(language, force):
     homepage_checked_next.update({
         number: now.isoformat() for number in current_homepages
         if number not in reusable_homepages})
-    data = {"homepage_checked_at": homepage_checked_next,
+    data = {"member_names": member_names, "homepage_checked_at": homepage_checked_next,
             "homepage_urls": current_homepages,
             "party_checked_at": checked_next, "profiles": profiles, "profiles_by_source": by_source, "profile_evidence": profile_evidence, "review_candidates": review_candidates, "updated_at": datetime.now(timezone.utc).isoformat(), "cached": False, "debug": {"review_candidates": review_diagnostic, "party_sources": party_diagnostic, "party_refresh_force": force, "party_refresh_reused": len(fresh_party), "homepage_refresh_force": force, "homepage_refresh_reused": len(reusable_homepages), "homepage_refresh_scanned": scanned_homepages, "homepage_refresh_ttl_hours": ttl_hours, "party_members_added": party_added, "previous_links_retained": retained, "coverage": missing, "platforms": platforms, "homepages_checked": homepages, "homepage_diagnostics": homepage_report, "homepage_profiles": len(profiles), "communication_count": len(communications), "communication_error": diagnostic.get("error")}}
     phase_ms["merge_and_coverage"] = round((time.monotonic() - phase_started) * 1000, 1)
