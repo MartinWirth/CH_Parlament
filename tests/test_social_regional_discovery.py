@@ -1,4 +1,5 @@
 import json
+import asyncio
 import pytest
 from app.social_regional_discovery import configured_regional_pages, discover_regional_party_candidates
 
@@ -17,8 +18,7 @@ def test_only_exact_named_curated_official_party_pages(tmp_path):
     assert stats["accepted"] == 1 and stats["rejected"] == 3
 
 
-@pytest.mark.asyncio
-async def test_regional_links_are_review_only(monkeypatch):
+def test_regional_links_are_review_only(monkeypatch):
     import app.social_regional_discovery as discovery
     from app.main import verified_social_url
     monkeypatch.setattr(discovery, "configured_regional_pages",
@@ -30,8 +30,8 @@ async def test_regional_links_are_review_only(monkeypatch):
                                                   "https://example.org/not-social"]
         return {}
     monkeypatch.setattr("app.main.scan_homepage", scan)
-    data, stats = await discover_regional_party_candidates(
-        {"1": "Ada Muster"}, verified_social_url)
+    data, stats = asyncio.run(discover_regional_party_candidates(
+        {"1": "Ada Muster"}, verified_social_url))
     assert len(data["1"]) == 1
     assert data["1"][0]["auto_accept"] is False
     assert data["1"][0]["verification_status"] == "requires_identity_verification"
