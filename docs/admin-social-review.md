@@ -134,3 +134,10 @@ Die optionale Datei `social_regional_party_sources.json` (oder `SOCIAL_REGIONAL_
 ```
 
 Die Werte sind **nur Formatbeispiele**, keine belegten Personenprofile. Pro Eintrag werden aktuelle Personennummer, vollständiger Name, `verified: true`, HTTPS und eine offizielle Parteidomain (einschliesslich kantonaler Subdomains) verlangt. Maximal 100 Quellen werden pro Refresh berücksichtigt. Der bestehende sichere Homepage-Scanner verarbeitet die Webseiten nur, wenn `ENABLE_EXTERNAL_HOMEPAGE_SCAN=1` aktiviert ist. Ausgelesene Social-Media-Links werden ausschliesslich in die manuelle Prüfliste eingetragen und niemals automatisch freigegeben. Ohne konfigurierte Quellen erfolgt kein zusätzlicher Netzwerkzugriff. Diagnose: `debug.review_candidates.regional_party_discovery`.
+
+
+### Initiale geprüfte kantonale Quellen
+
+`social_regional_party_sources.json` enthält vier anhand offizieller GLP-Zürich-Personenseiten und parlamentarischer Personennummern geprüfte Quellseiten: Martin Bäumle (2585), Patrick Hässig (11507), Tiana Angelina Moser (2700), Barbara Schaffner (3179). Diese Einträge belegen die **Personenseiten**, nicht die Identität verlinkter Social-Media-Konten. Letztere bleiben ausschliesslich manuelle Prüfkandidaten.
+
+Die Konfiguration wird beim nächsten autorisierten Social-Profil-Refresh berücksichtigt, sofern `ENABLE_EXTERNAL_HOMEPAGE_SCAN=1` in der Laufzeitumgebung gesetzt ist. Ohne diese Einstellung erfolgt kein externer Scan. Die tatsächliche Zahl neu gefundener Kandidaten ist erst nach einem Refresh bekannt. Weitere Quellen nur mit eindeutig belegter offizieller Personenseite und stabiler Parlaments-Personennummer ergänzen.
