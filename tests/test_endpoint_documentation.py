@@ -30,12 +30,13 @@ def documented_endpoints():
 
 
 def actual_endpoints():
+    # OpenAPI is the authoritative published API surface. Include admin
+    # endpoints even if routers were added after FastAPI initialization.
     return {
-        (method, route.path)
-        for route in app.routes
-        if hasattr(route, "methods")
-        for method in route.methods
-        if method in {"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
+        (method.upper(), path)
+        for path, item in app.openapi()["paths"].items()
+        for method in item
+        if method.upper() in {"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
     }
 
 
