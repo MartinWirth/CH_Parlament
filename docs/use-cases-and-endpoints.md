@@ -1,6 +1,6 @@
 # CH_Parlament – Use Cases und HTTP-Endpunkte
 
-Stand: Code in `app/main.py` und `app/admin.py`. Die API ist eine FastAPI-Anwendung; interaktive OpenAPI-Dokumentation ist bei Standardkonfiguration unter `/docs` und das Schema unter `/openapi.json` verfügbar.
+Stand: Code in `app/main.py` und `app/admin.py`. Die CI prüft mit `tests/test_endpoint_documentation.py`, dass die nachstehenden HTTP-Methoden und Pfade vollständig und ohne veraltete Einträge den registrierten FastAPI-Routen entsprechen. Bei neuen Endpunkten müssen diese Tabellen im selben Pull Request aktualisiert werden. Die API ist eine FastAPI-Anwendung; interaktive OpenAPI-Dokumentation ist bei Standardkonfiguration unter `/docs` und das Schema unter `/openapi.json` verfügbar.
 
 ## Rollen und zentrale Anwendungsfälle
 
@@ -44,6 +44,7 @@ Stand: Code in `app/main.py` und `app/admin.py`. Die API ist eine FastAPI-Anwend
 | GET | `/api/odata-schema` | – | Metadaten und relevante Felder des Parlaments-OData-Dienstes |
 | GET | `/docs` | – | FastAPI Swagger UI (sofern nicht deaktiviert) |
 | GET | `/redoc` | – | FastAPI ReDoc (sofern nicht deaktiviert) |
+| GET | `/docs/oauth2-redirect` | – | FastAPI Swagger UI OAuth2-Redirect-Hilfsseite |
 | GET | `/openapi.json` | – | Generiertes OpenAPI-Schema |
 
 ## Admin-Endpunkte
