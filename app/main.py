@@ -1722,6 +1722,17 @@ async def _run_social_profiles_refresh(language, force):
                 known.add(entry["url"])
     review_diagnostic["personal_homepage_discovered"] = sum(
         len(entries) for entries in homepage_discovered.values())
+    from .social_regional_discovery import discover_regional_party_candidates
+    regional_discovered, regional_diagnostic = await discover_regional_party_candidates(
+        member_names, verified_social_url, checked_at=now.isoformat())
+    for number, entries in regional_discovered.items():
+        existing = review_candidates.setdefault(number, [])
+        known = {item["url"] for item in existing}
+        for entry in entries:
+            if entry["url"] not in known:
+                existing.append(entry)
+                known.add(entry["url"])
+    review_diagnostic["regional_party_discovery"] = regional_diagnostic
     review_diagnostic["official_party_discovered"] = sum(
         len(items) for items in discovered_review.values())
     review_diagnostic["total_for_review"] = sum(
