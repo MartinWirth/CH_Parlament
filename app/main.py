@@ -19,7 +19,8 @@ import xml.etree.ElementTree as ET
 from urllib.parse import urlparse, urlunparse
 import httpx
 from .public_https import PublicHTTPSClient
-from .social_evidence import evidence_for_sources, load_review_candidates, discover_party_review_candidates
+from .social_evidence import (evidence_for_sources, load_review_candidates, discover_party_review_candidates,
+                              discover_personal_homepage_review_candidates)
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -1709,6 +1710,18 @@ async def _run_social_profiles_refresh(language, force):
             if entry["url"] not in known:
                 existing.append(entry)
                 known.add(entry["url"])
+    homepage_discovered = discover_personal_homepage_review_candidates(
+        homepage_report, member_names, current_homepages, verified_social_url,
+        now.isoformat())
+    for number, entries in homepage_discovered.items():
+        existing = review_candidates.setdefault(number, [])
+        known = {item["url"] for item in existing}
+        for entry in entries:
+            if entry["url"] not in known:
+                existing.append(entry)
+                known.add(entry["url"])
+    review_diagnostic["personal_homepage_discovered"] = sum(
+        len(entries) for entries in homepage_discovered.values())
     review_diagnostic["official_party_discovered"] = sum(
         len(items) for items in discovered_review.values())
     review_diagnostic["total_for_review"] = sum(
