@@ -43,7 +43,8 @@ def actual_endpoints():
 def test_endpoint_inventory_matches_fastapi_routes():
     documented = documented_endpoints()
     assert len(documented) == len(set(documented)), "Duplicate endpoint rows in documentation"
-    # The framework registers HEAD implicitly on its docs routes; document GET.\n    # The admin router uses a prefix that is already present in route.path.\n    expected = actual_endpoints() | BUILTIN_ROUTES
+    # The framework registers HEAD implicitly on docs routes; document GET.
+    expected = actual_endpoints() | BUILTIN_ROUTES
     missing = expected - set(documented)
     obsolete = set(documented) - expected
     assert not missing and not obsolete, (
