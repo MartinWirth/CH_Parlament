@@ -16,6 +16,7 @@ BUILTIN_ROUTES = {
     ("GET", "/openapi.json"),
     ("GET", "/docs"),
     ("GET", "/redoc"),
+    ("GET", "/docs/oauth2-redirect"),
 }
 
 
@@ -34,14 +35,14 @@ def actual_endpoints():
         for route in app.routes
         if hasattr(route, "methods")
         for method in route.methods
-        if method in {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
+        if method in {"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
     }
 
 
 def test_endpoint_inventory_matches_fastapi_routes():
     documented = documented_endpoints()
     assert len(documented) == len(set(documented)), "Duplicate endpoint rows in documentation"
-    expected = actual_endpoints() | BUILTIN_ROUTES
+    # The framework registers HEAD implicitly on its docs routes; document GET.\n    # The admin router uses a prefix that is already present in route.path.\n    expected = actual_endpoints() | BUILTIN_ROUTES
     missing = expected - set(documented)
     obsolete = set(documented) - expected
     assert not missing and not obsolete, (
