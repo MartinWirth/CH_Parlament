@@ -2,6 +2,10 @@
 
 Interaktive Übersicht der Mitglieder von Nationalrat und Ständerat mit Mehrfachauswahl-Filtern für Rat, Partei, Kanton, Fraktion, Sprache und Geschlecht sowie Namenssuche und sortierbarer Tabelle.
 
+## Use Cases und API-Endpunkte
+
+Eine vollständige Übersicht der Anwendungsfälle, HTTP-Endpunkte, Parameter, Berechtigungen und typischen Abläufe steht in [docs/use-cases-and-endpoints.md](docs/use-cases-and-endpoints.md). Die automatisch generierte FastAPI-Referenz ist nach dem Start unter `/docs` verfügbar.
+
 ## Start
 
 ```bash
