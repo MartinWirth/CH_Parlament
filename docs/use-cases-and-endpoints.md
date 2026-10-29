@@ -44,6 +44,7 @@ Stand: Code in `app/main.py` und `app/admin.py`. Die CI prüft mit `tests/test_e
 | GET | `/api/odata-schema` | – | Metadaten und relevante Felder des Parlaments-OData-Dienstes |
 | GET | `/docs` | – | FastAPI Swagger UI (sofern nicht deaktiviert) |
 | GET | `/redoc` | – | FastAPI ReDoc (sofern nicht deaktiviert) |
+| GET | `/docs/oauth2-redirect` | – | FastAPI Swagger UI OAuth2-Redirect-Hilfsseite |
 | GET | `/openapi.json` | – | Generiertes OpenAPI-Schema |
 
 ## Admin-Endpunkte
