@@ -1732,7 +1732,7 @@ async def _run_social_profiles_refresh(language, force):
     homepage_checked_next.update({
         number: now.isoformat() for number in current_homepages
         if number not in reusable_homepages})
-    data = {"homepage_checked_at": homepage_checked_next,
+    data = {"member_names": member_names, "homepage_checked_at": homepage_checked_next,
             "homepage_urls": current_homepages,
             "party_checked_at": checked_next, "profiles": profiles, "profiles_by_source": by_source, "profile_evidence": profile_evidence, "review_candidates": review_candidates, "updated_at": datetime.now(timezone.utc).isoformat(), "cached": False, "debug": {"review_candidates": review_diagnostic, "party_sources": party_diagnostic, "party_refresh_force": force, "party_refresh_reused": len(fresh_party), "homepage_refresh_force": force, "homepage_refresh_reused": len(reusable_homepages), "homepage_refresh_scanned": scanned_homepages, "homepage_refresh_ttl_hours": ttl_hours, "party_members_added": party_added, "previous_links_retained": retained, "coverage": missing, "platforms": platforms, "homepages_checked": homepages, "homepage_diagnostics": homepage_report, "homepage_profiles": len(profiles), "communication_count": len(communications), "communication_error": diagnostic.get("error")}}
     phase_ms["merge_and_coverage"] = round((time.monotonic() - phase_started) * 1000, 1)

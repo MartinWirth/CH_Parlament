@@ -106,3 +106,10 @@ Bei **neuen** Live-Prüfläufen wird zusätzlich die momentane Offline-Qualität
 Der geschützte, rein lesende Endpunkt `GET /admin/data-health/regressions` vergleicht bis zu 30 aufeinanderfolgende gespeicherte Prüfläufe. Parameter: `language`, `limit` (2–30), `reachability_drop` und `flagged_rise` (je 0–100 Prozentpunkte) sowie `duplicate_increase` und `invalid_increase` (je 0–10000 Einträge). Standardwerte: 10, 10, 1, 1. Die Schwellenwerte sind im Admin-Dashboard einstellbar.
 
 Die Antwort enthält alle Verschlechterungen innerhalb des ausgewählten Zeitfensters sowie gesondert die Verschlechterungen des jüngsten Prüflaufs. Fehlende historische Offline-Qualitätsdaten werden nicht als null Fehler interpretiert. Die Erreichbarkeitsquote gilt nur für die im jeweiligen Lauf geprüften Links; geänderte Stichprobengrössen und begrenzte Läufe werden markiert. Die Funktion verschickt keine Benachrichtigungen, startet keine Prüfungen und verändert keine Profile.
+
+
+## Persönliche Social-Media-Profile gezielt recherchieren
+
+Die Admin-Oberfläche bietet eine priorisierte Rechercheliste für fehlende persönliche Profile auf LinkedIn, Instagram, Facebook, X und YouTube. `GET /admin/social-discovery/worklist?language=DE&platform=all&limit=50` ist nur mit Admin-Sitzung zugänglich. Die Liste nutzt die beim nächsten Social-Profil-Refresh gespeicherten aktuellen Mitgliedsnamen und Personennummern. Bereits zugeordnete und zur Prüfung vorgemerkte Plattformen werden übersprungen; Mitglieder mit besonders geringer Profilabdeckung erscheinen zuerst. Die Suchlinks führen zu einer gezielten externen Websuche.
+
+**Sicherheitsgrenze:** Suchlinks sind Recherchehilfen und keine gefundenen, verifizierten Social-Media-Accounts. Treffer dürfen nicht automatisch Personen zugeordnet werden. Identität und Quelle müssen vor dem bestehenden manuellen Freigabeprozess geprüft werden. Es werden weder Profile verändert noch Suchergebnisse automatisch übernommen. Ältere Snapshots ohne `member_names` liefern bis zum nächsten Refresh keine Rechercheaufträge.
