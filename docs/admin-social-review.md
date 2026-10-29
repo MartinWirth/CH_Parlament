@@ -120,3 +120,17 @@ Die Admin-Oberfläche bietet eine priorisierte Rechercheliste für fehlende pers
 Bei einem autorisierten Profil-Refresh werden bereits untersuchte, vom Parlament angegebene persönliche Homepages und höchstens zwei dazugehörige Unterseiten ausgewertet. Links, deren Zuordnung zur Person nicht sicher bestätigt ist, werden nun aus den vorhandenen Scan-Diagnosen in die **manuelle Prüfliste** übernommen. Voraussetzung sind die exakte Personennummer und der aktuelle Name, die unveränderte parlamentarisch gelistete Homepage, eine HTTPS-Quellseite auf demselben Host und ein gültiger Social-Media-Link. Organisationsaccounts werden ausgeschlossen; doppelte Kandidaten werden nicht erneut aufgenommen. Die Debug-Diagnose `review_candidates.personal_homepage_discovered` zeigt die Anzahl.
 
 **Keine automatische Freigabe:** Die gefundenen Links sind ausschliesslich Recherchekandidaten (`requires_identity_verification`, `auto_accept: false`). Es erfolgen keine zusätzlichen Netzwerkanfragen, keine ungeprüfte Übernahme in die Mitgliederprofile und keine Änderung an bestehenden Freigabeentscheidungen. Bei deaktiviertem Homepage-Scanning oder wiederverwendeten alten Snapshots entstehen keine neuen Kandidaten, bis die Seiten erneut untersucht werden.
+
+
+## Regionale Partei- und Kandidatenprofile als zusätzliche Quellen
+
+Die optionale Datei `social_regional_party_sources.json` (oder `SOCIAL_REGIONAL_PARTY_SOURCES_PATH`) enthält eine Liste manuell geprüfter offizieller Personenprofilseiten, beispielsweise:
+
+```json
+[
+  {"person_number": "1234", "name": "Vorname Nachname",
+   "profile_url": "https://zh.glp.swiss/personen/beispiel", "verified": true}
+]
+```
+
+Die Werte sind **nur Formatbeispiele**, keine belegten Personenprofile. Pro Eintrag werden aktuelle Personennummer, vollständiger Name, `verified: true`, HTTPS und eine offizielle Parteidomain (einschliesslich kantonaler Subdomains) verlangt. Maximal 100 Quellen werden pro Refresh berücksichtigt. Der bestehende sichere Homepage-Scanner verarbeitet die Webseiten nur, wenn `ENABLE_EXTERNAL_HOMEPAGE_SCAN=1` aktiviert ist. Ausgelesene Social-Media-Links werden ausschliesslich in die manuelle Prüfliste eingetragen und niemals automatisch freigegeben. Ohne konfigurierte Quellen erfolgt kein zusätzlicher Netzwerkzugriff. Diagnose: `debug.review_candidates.regional_party_discovery`.
