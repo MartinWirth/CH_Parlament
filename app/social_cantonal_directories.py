@@ -11,7 +11,7 @@ from .social_regional_discovery import _official_host
 
 
 def _slug(value):
-    normalized = unicodedata.normalize("NFKD", value).casefold()
+    normalized = unicodedata.normalize("NFKD", value.casefold().replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss"))
     normalized = "".join(c for c in normalized if not unicodedata.combining(c))
     return re.sub(r"[^a-z0-9]+", "-", normalized).strip("-")
 
