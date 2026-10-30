@@ -13,6 +13,8 @@ def targeted_research_queue(snapshot, *, limit=100):
         names = {}
     if not isinstance(profiles, dict):
         profiles = {}
+    if not isinstance(profiles, dict):
+        profiles = {}
     if not isinstance(candidates, dict):
         candidates = {}
     if not isinstance(homepages, dict):
