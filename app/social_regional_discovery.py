@@ -134,10 +134,21 @@ async def discover_regional_party_candidates(member_names, verified_social_url, 
     # Inspect up to two relevant same-host subpages of each curated person page.
     # The shared scanner enforces HTTPS, public destinations and redirect safety.
     subpage_jobs = list(additional_jobs)
-    for (number, source), report in zip(pages.items(), reports):
+    seen_jobs = set(subpage_jobs)
+    auto_discovered = 0
+    jobs_per_member = {}
+    for number, _ in subpage_jobs:
+        jobs_per_member[number] = jobs_per_member.get(number, 0) + 1
+    profiles = existing_profiles if isinstance(existing_profiles, dict) else {}
+    # Automatically follow relevant same-host links exposed by verified person
+    # pages. Prioritize uncovered members and cap the total request budget.
+    for number, source in sorted(pages.items(), key=lambda item: (
+            bool(profiles.get(item[0])), item[0])):
+        report = reports[list(pages).index(number)]
         if report.get("status") != "parsed":
             continue
-        for suburl in report.get("internal_page_candidates", [])[:2]:
+        per_member = jobs_per_member.get(number, 0)
+        for suburl in report.get("internal_page_candidates", [])[:10]:
             if not isinstance(suburl, str):
                 continue
             try:
@@ -145,11 +156,18 @@ async def discover_regional_party_candidates(member_names, verified_social_url, 
                 allowed = (child.scheme == "https" and child.hostname == parent.hostname
                            and not child.username and not child.password
                            and child.port in (None, 443) and not child.query
-                           and not child.fragment and child.path != parent.path)
+                           and not child.fragment and child.path != parent.path
+                           and bool(child.path.strip("/")))
             except (ValueError, UnicodeError):
                 allowed = False
-            if allowed:
-                subpage_jobs.append((number, suburl))
+            job = (number, suburl)
+            if allowed and job not in seen_jobs and len(subpage_jobs) < 200:
+                seen_jobs.add(job)
+                subpage_jobs.append(job)
+                auto_discovered += 1
+                per_member += 1
+            if per_member >= 2:
+                break
     subpage_reports = [{} for _ in subpage_jobs]
     if subpage_jobs:
         async with PublicHTTPSClient(timeout=8, headers={"User-Agent": "CH-Parlament/1.0"}) as client:
@@ -205,6 +223,7 @@ async def discover_regional_party_candidates(member_names, verified_social_url, 
                     "auto_accept": False,
                     "reason": "official_subpage_link_requires_manual_identity_confirmation",
                 })
+    diagnostic["auto_discovered_subpages"] = auto_discovered
     diagnostic["explicit_additional_pages"] = len(additional_jobs)
     diagnostic["subpages_scanned"] = len(subpage_jobs)
     diagnostic["subpages_parsed"] = sum(
