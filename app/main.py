@@ -126,9 +126,20 @@ async def fetch_members(language="DE"):
             else:
                 page = payload.get("value", []) if isinstance(payload, dict) else []
                 next_url = payload.get("@odata.nextLink") if isinstance(payload, dict) else None
+            if not isinstance(page, list) or any(not isinstance(item, dict) for item in page):
+                raise ValueError("Unexpected MemberCouncil page structure")
             logger.info("API parsed page=%d rows=%d keys=%s", len(seen), len(page), list(page[0].keys()) if page else [])
             rows.extend(page)
             url = str(httpx.URL(url).join(next_url)) if next_url else None
+    unique_rows = {}
+    for row in rows:
+        identity = (row.get("ID"), row.get("Language"))
+        if identity[0] is None:
+            raise ValueError("MemberCouncil row missing ID")
+        unique_rows[identity] = row
+    if len(unique_rows) != len(rows):
+        logger.warning("MemberCouncil duplicate rows=%d", len(rows) - len(unique_rows))
+    rows = list(unique_rows.values())
     logger.info("API fetch completed rows=%d duration_ms=%d", len(rows), round((time.monotonic()-started)*1000))
     return rows
 
@@ -162,6 +173,14 @@ async def fetch_communications(language, person_numbers=None):
                 diagnostic["pages"] += 1
                 diagnostic["raw_count"] += len(page)
                 for row in page:
+                    if not isinstance(row, dict):
+                        raise ValueError("Unexpected PersonCommunication record")
+                    identity = row.get("ID")
+                    if identity is not None:
+                        if identity in seen:
+                            diagnostic["duplicates"] = diagnostic.get("duplicates", 0) + 1
+                            continue
+                        seen.add(identity)
                     lang = str(row.get("Language", ""))
                     kind = str(row.get("CommunicationTypeText") or row.get("CommunicationType") or "")
                     diagnostic["languages"][lang] = diagnostic["languages"].get(lang, 0) + 1
@@ -174,6 +193,8 @@ async def fetch_communications(language, person_numbers=None):
                     break
             else:
                 diagnostic["truncated"] = True
+            if diagnostic["truncated"]:
+                diagnostic["error"] = "PersonCommunication page limit reached; results may be incomplete"
         diagnostic["matched_members"] = len({str(row.get("PersonNumber")) for row in rows})
         logger.info("PersonCommunication diagnostic=%s selected=%d", diagnostic, len(rows))
         return rows, diagnostic
