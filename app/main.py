@@ -1,6 +1,7 @@
 from .config import load_environment
 load_environment()
 
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 import os
@@ -27,7 +28,29 @@ from fastapi.staticfiles import StaticFiles
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 logger = logging.getLogger("ch_parlament")
-app = FastAPI(title="CH_Parlament")
+# Scheduler is owned by the ASGI application lifecycle.
+_scheduler_task = None
+
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    global _scheduler_task
+    from .social_check_scheduler import interval_hours, loop
+    if interval_hours():
+        _scheduler_task = asyncio.create_task(loop())
+    try:
+        yield
+    finally:
+        if _scheduler_task is not None:
+            _scheduler_task.cancel()
+            try:
+                await _scheduler_task
+            except asyncio.CancelledError:
+                pass
+            _scheduler_task = None
+
+
+app = FastAPI(title="CH_Parlament", lifespan=lifespan)
 ROOT = Path(__file__).resolve().parent
 API = os.getenv("PARLIAMENT_API", "https://ws.parlament.ch/odata.svc")
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
@@ -2021,25 +2044,3 @@ async def odata_schema():
         raise HTTPException(status_code=502, detail=f"OData-Metadaten nicht abrufbar: {exc}") from exc
 
 
-# Optional scheduler: disabled unless SOCIAL_CHECK_INTERVAL_HOURS is set.
-_scheduler_task = None
-
-
-@app.on_event("startup")
-async def start_social_check_scheduler():
-    global _scheduler_task
-    from .social_check_scheduler import interval_hours, loop
-    if interval_hours():
-        _scheduler_task = asyncio.create_task(loop())
-
-
-@app.on_event("shutdown")
-async def stop_social_check_scheduler():
-    global _scheduler_task
-    if _scheduler_task is not None:
-        _scheduler_task.cancel()
-        try:
-            await _scheduler_task
-        except asyncio.CancelledError:
-            pass
-        _scheduler_task = None
