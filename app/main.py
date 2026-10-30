@@ -849,40 +849,11 @@ async def scan_homepage(client, url, semaphore, diagnostic=None, timeout_retry_s
                     diagnostic["parser"] = dict(parser.link_diagnostics)
                     diagnostic["parser"]["candidate_urls"] = len(parser.links) + len(list(parser.social_references()))
                 if diagnostic is not None:
-                    keywords = ("kontakt", "contact", "contatto", "about", "about-me",
-                                "ueber-mich", "uber-mich", "über-mich", "social-media",
-                                "socialmedia", "links", "person", "profil", "profile",
-                                "biografie", "biography", "politique", "politik",
-                                "à propos", "a propos", "chi sono", "über mich")
-                    ranked = []
-                    rejected = 0
-                    for entry in parser.navigation_links:
-                        try:
-                            target = urljoin(current, entry["href"])
-                            parsed_target = urlparse(target)
-                            path = parsed_target.path.lower().rstrip("/")
-                            label = entry["text"].strip().lower()
-                            if (parsed_target.scheme != "https" or
-                                parsed_target.hostname != urlparse(current).hostname or
-                                parsed_target.port not in (None, 443) or
-                                parsed_target.username or parsed_target.password or
-                                parsed_target.query or parsed_target.fragment or
-                                target == current):
-                                rejected += 1
-                                continue
-                            path_match = any(path.endswith("/" + word.replace(" ", "-")) for word in keywords)
-                            label_match = any(word in label for word in keywords)
-                            if not (path_match or label_match):
-                                rejected += 1
-                                continue
-                            score = (2 if path_match else 0) + (1 if label_match else 0)
-                            if not any(item[1] == target for item in ranked):
-                                ranked.append((score, target))
-                        except (ValueError, UnicodeError):
-                            rejected += 1
-                    ranked.sort(key=lambda item: -item[0])
-                    diagnostic["internal_page_candidates"] = [url for _, url in ranked[:2]]
-                    diagnostic["subpage_candidate_count"] = len(ranked)
+                    from .social_subpage_ranking import rank_internal_pages
+                    selected, candidate_count, rejected = rank_internal_pages(
+                        current, parser.navigation_links)
+                    diagnostic["internal_page_candidates"] = selected
+                    diagnostic["subpage_candidate_count"] = candidate_count
                     diagnostic["subpage_rejected_link_count"] = rejected
                 candidate_sources = [(item, "anchor_or_metadata") for item in parser.links]
                 candidate_sources += [(item, "json_ld_person_sameAs") for item in parser.social_references()]
