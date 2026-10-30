@@ -19,7 +19,7 @@ def test_targeted_scan_does_not_fetch_without_eligible_sources():
 
 
 def test_targeted_scan_skips_confirmed_members():
-    found, diagnostic = await discover_uncovered_homepage_candidates(
+    found, diagnostic = asyncio.run(discover_uncovered_homepage_candidates(
         {"1": "Example"}, {"1": "https://example.org/person"},
         {"1": {"LinkedIn": "https://linkedin.com/in/example"}},
         lambda url: "LinkedIn", checked_at="2026-10-30T00:00:00Z"))
