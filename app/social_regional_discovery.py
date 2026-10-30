@@ -121,7 +121,10 @@ async def discover_regional_party_candidates(member_names, verified_social_url, 
     checked_at = checked_at or _utc_now()
     pages, diagnostic = configured_regional_pages(
         member_names, path, existing_profiles=existing_profiles)
-    additional_jobs = configured_additional_party_pages(\n        member_names, path, existing_profiles=existing_profiles)\n    if not pages and not additional_jobs:\n        return {}, diagnostic
+    additional_jobs = configured_additional_party_pages(
+        member_names, path, existing_profiles=existing_profiles)
+    if not pages and not additional_jobs:
+        return {}, diagnostic
     semaphore = asyncio.Semaphore(4)
     reports = [{} for _ in pages]
     async with PublicHTTPSClient(timeout=8, headers={"User-Agent": "CH-Parlament/1.0"}) as client:
@@ -202,7 +205,8 @@ async def discover_regional_party_candidates(member_names, verified_social_url, 
                     "auto_accept": False,
                     "reason": "official_subpage_link_requires_manual_identity_confirmation",
                 })
-    diagnostic["explicit_additional_pages"] = len(additional_jobs)\n    diagnostic["subpages_scanned"] = len(subpage_jobs)
+    diagnostic["explicit_additional_pages"] = len(additional_jobs)
+    diagnostic["subpages_scanned"] = len(subpage_jobs)
     diagnostic["subpages_parsed"] = sum(
         report.get("status") == "parsed" for report in subpage_reports)
     diagnostic["candidates"] = sum(len(items) for items in found.values())
