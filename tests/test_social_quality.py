@@ -48,3 +48,26 @@ def test_quality_endpoint_requires_admin_and_is_read_only(monkeypatch, tmp_path)
             assert (await client.get("/admin/quality?language=XX")).status_code == 422
     asyncio.run(run())
     assert main.read_profile_snapshot()["DE"]["profiles"]["1"]["Instagram"] == "https://instagram.com/example"
+
+
+def test_quality_flags_content_links_for_review_without_deleting():
+    profiles = {
+        "1": {"LinkedIn": "https://www.linkedin.com/company/example"},
+        "2": {"Instagram": "https://instagram.com/p/example"},
+        "3": {"X": "https://x.com/politician"},
+    }
+    before = {key: dict(value) for key, value in profiles.items()}
+    report = audit_profiles(profiles, verified_social_url)
+    assert report["needs_review"] == 2
+    assert report["invalid"] == 0
+    assert profiles == before
+
+
+def test_quality_detects_www_mobile_duplicates():
+    profiles = {
+        "1": {"Facebook": "https://www.facebook.com/profile.php?id=123&utm_source=abc"},
+        "2": {"Facebook": "https://m.facebook.com/profile.php?id=123"},
+    }
+    report = audit_profiles(profiles, verified_social_url)
+    assert report["duplicates"] == 2
+    assert canonical_url("https://m.facebook.com/profile.php?id=123") == "https://www.facebook.com/profile.php?id=123"
