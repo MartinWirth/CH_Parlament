@@ -33,8 +33,9 @@ def canonical_url(url):
             return None
         path = parsed.path.rstrip("/") or "/"
         host = parsed.hostname.lower().rstrip(".")
-        if host.startswith(("www.", "m.")) and host[4:] in {"facebook.com", "instagram.com", "linkedin.com", "youtube.com", "x.com", "twitter.com"}:
-            host = host[4:]
+        bare_host = host[4:] if host.startswith("www.") else host[2:] if host.startswith("m.") else host
+        if bare_host in {"facebook.com", "instagram.com", "linkedin.com", "youtube.com", "x.com", "twitter.com"}:
+            host = bare_host
         query = ""
         # Facebook's legacy profile.php route identifies the account by its id
         # query parameter. Dropping it would merge unrelated people's profiles.
