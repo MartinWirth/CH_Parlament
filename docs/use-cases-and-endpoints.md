@@ -137,3 +137,7 @@ Beim bestehenden Social-Profil-Refresh werden bis zu 30 bereits aus Parlamentsda
 ### Zusätzliche verifizierte Partei-Mitgliederseiten
 
 Ein Eintrag in `social_regional_party_sources.json` darf optional `additional_profile_urls` (Liste mit maximal drei zusätzlichen HTTPS-Seiten) enthalten. Diese werden nur für Ratsmitglieder ohne bestätigte Social-Media-Profile untersucht. Jede URL muss zum exakt gleichen Host der zuvor manuell verifizierten offiziellen Partei-Mitgliederseite gehören; fremde Hosts, unsichere Protokolle und URLs mit Zugangsdaten werden verworfen. Die Erweiterung verwendet weiterhin den SSRF-geschützten Scanner und übergibt Funde ausschliesslich mit Quellenbeleg und `auto_accept=false` an die manuelle Review-Queue. `regional_party_discovery.explicit_additional_pages` zählt die geprüften Zusatzseiten. Ohne konfigurierte Zusatzseiten erfolgt keine zusätzliche Netzabfrage.
+
+### Automatische Erkennung offizieller Mitglieder-Unterseiten
+
+Aus bereits verifizierten Partei-Mitgliederseiten werden relevante interne Links automatisch erkannt. Der Scanner folgt maximal zwei neuen HTTPS-Unterseiten pro Mitglied auf demselben Host, priorisiert Personen ohne bestätigte Social-Profile, dedupliziert gegen explizit konfigurierte Zusatzseiten und begrenzt die Gesamtzahl der Unterseiten-Requests auf 200. Die Diagnostik meldet `regional_party_discovery.auto_discovered_subpages`. Entdeckte Social-Links gelangen nur in die manuelle Review-Queue; es erfolgt keine automatische Identitätsbestätigung.
