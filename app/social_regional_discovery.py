@@ -60,6 +60,58 @@ def configured_regional_pages(member_names, path=None, *, existing_profiles=None
                     "rejected": rejected + max(0, len(entries) - 200)}
 
 
+def configured_additional_party_pages(member_names, path=None, *, existing_profiles=None):
+    """Optional explicitly verified same-host person subpages for uncovered members.
+
+    A source entry may list up to three additional_profile_urls. No URL guessing.
+    """
+    path = Path(path or os.getenv("SOCIAL_REGIONAL_PARTY_SOURCES_PATH",
+                                 "social_regional_party_sources.json"))
+    try:
+        entries = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    if not isinstance(entries, list):
+        return []
+    profiles = existing_profiles if isinstance(existing_profiles, dict) else {}
+    jobs, seen = [], set()
+    for entry in entries[:200]:
+        if not isinstance(entry, dict) or entry.get("verified") is not True:
+            continue
+        number = str(entry.get("person_number", ""))
+        name = entry.get("name")
+        source = entry.get("profile_url")
+        if (not isinstance(name, str) or
+                name.strip().casefold() != member_names.get(number, "").strip().casefold()
+                or profiles.get(number) or not isinstance(source, str)):
+            continue
+        try:
+            parent = urlparse(source)
+            if (parent.scheme != "https" or not _official_host(parent.hostname)
+                    or parent.username or parent.password or parent.port not in (None, 443)):
+                continue
+        except (ValueError, UnicodeError):
+            continue
+        urls = entry.get("additional_profile_urls", [])
+        if not isinstance(urls, list):
+            continue
+        for url in urls[:3]:
+            if not isinstance(url, str):
+                continue
+            try:
+                child = urlparse(url)
+                valid = (child.scheme == "https" and child.hostname == parent.hostname
+                         and not child.username and not child.password
+                         and child.port in (None, 443) and bool(child.path.strip("/"))
+                         and not child.query and not child.fragment and url != source)
+            except (ValueError, UnicodeError):
+                valid = False
+            if valid and (number, url) not in seen:
+                seen.add((number, url))
+                jobs.append((number, url))
+    return jobs[:100]
+
+
 async def discover_regional_party_candidates(member_names, verified_social_url, *, path=None,
                                               checked_at=None, existing_profiles=None):
     """Inspect at most 200 curated official person pages; require manual review."""
@@ -69,7 +121,9 @@ async def discover_regional_party_candidates(member_names, verified_social_url, 
     checked_at = checked_at or _utc_now()
     pages, diagnostic = configured_regional_pages(
         member_names, path, existing_profiles=existing_profiles)
-    if not pages:
+    additional_jobs = configured_additional_party_pages(
+        member_names, path, existing_profiles=existing_profiles)
+    if not pages and not additional_jobs:
         return {}, diagnostic
     semaphore = asyncio.Semaphore(4)
     reports = [{} for _ in pages]
@@ -79,7 +133,7 @@ async def discover_regional_party_candidates(member_names, verified_social_url, 
             for index, url in enumerate(pages.values())))
     # Inspect up to two relevant same-host subpages of each curated person page.
     # The shared scanner enforces HTTPS, public destinations and redirect safety.
-    subpage_jobs = []
+    subpage_jobs = list(additional_jobs)
     for (number, source), report in zip(pages.items(), reports):
         if report.get("status") != "parsed":
             continue
@@ -151,6 +205,7 @@ async def discover_regional_party_candidates(member_names, verified_social_url, 
                     "auto_accept": False,
                     "reason": "official_subpage_link_requires_manual_identity_confirmation",
                 })
+    diagnostic["explicit_additional_pages"] = len(additional_jobs)
     diagnostic["subpages_scanned"] = len(subpage_jobs)
     diagnostic["subpages_parsed"] = sum(
         report.get("status") == "parsed" for report in subpage_reports)
