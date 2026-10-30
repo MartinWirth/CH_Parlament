@@ -29,8 +29,9 @@ def test_curated_person_page_scans_only_same_host_subpages(monkeypatch):
     found, diagnostic = asyncio.run(discover_regional_party_candidates(
         {"1": "Ada Muster"}, verified_social_url))
     assert scanned == ["https://zh.glp.swiss/person/ada",
-                       "https://zh.glp.swiss/person/ada/contact"]
-    assert diagnostic["subpages_scanned"] == 1
+                       "https://zh.glp.swiss/person/ada/contact",
+                       "https://zh.glp.swiss/person/ada/about"]
+    assert diagnostic["subpages_scanned"] == 2
     assert found["1"][0]["source_url"] == "https://zh.glp.swiss/person/ada/contact"
     assert found["1"][0]["auto_accept"] is False
     assert found["1"][0]["verification_status"] == "requires_identity_verification"
