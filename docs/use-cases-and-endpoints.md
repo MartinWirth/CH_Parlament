@@ -145,3 +145,7 @@ Aus bereits verifizierten Partei-Mitgliederseiten werden relevante interne Links
 ### Kantonale Parteiverzeichnisse
 
 `SOCIAL_CANTONAL_DIRECTORY_SOURCES_PATH` (Standard `social_cantonal_party_directories.json`) definiert manuell verifizierte offizielle kantonale Mitgliederverzeichnisse. Maximal 20 Verzeichnisse und 40 daraus eindeutig anhand des vollständigen Namens im URL-Slug zugeordnete Mitgliederseiten werden über den bestehenden HTTPS-/SSRF-geschützten Scanner geprüft. Unbestätigte Social-Links erscheinen ausschliesslich in der manuellen Review-Queue mit `source_type=verified_cantonal_party_directory`, Quellen-URL und `auto_accept=false`. Der Diagnosebericht enthält `cantonal_directory_discovery`. Die URL-Namensübereinstimmung ist nur ein Recherchehinweis und kein Identitätsnachweis.
+
+### Kantonale Verzeichnisse mit abweichenden URL-Strukturen
+
+Der HTML-Scanner stellt bis zu 300 Verzeichnis-Anker mit absoluter URL und Linktext als Diagnose bereit. Die kantonale Recherche akzeptiert neben exakten vollständigen Namens-Slugs auch exakt übereinstimmende vollständige Namen im Linktext (z. B. Profil-URL `/p/12345`). Fremde Hosts, URL-Parameter, Fragmente, Zugangsdaten, Namenskonflikte und mehrdeutige Namenszuordnungen werden verworfen. Ein Treffer bleibt immer ein ungeprüfter Review-Kandidat und wird niemals automatisch akzeptiert.

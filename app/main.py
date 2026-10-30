@@ -853,6 +853,13 @@ async def scan_homepage(client, url, semaphore, diagnostic=None, timeout_retry_s
                     selected, candidate_count, rejected = rank_internal_pages(
                         current, parser.navigation_links)
                     diagnostic["internal_page_candidates"] = selected
+                    # Preserve bounded raw directory anchors for member-name matching.
+                    # These URLs are only inspected by the strict same-host matcher.
+                    diagnostic["directory_links"] = [
+                        {"url": urljoin(current, entry["href"]), "text": entry.get("text", "")}
+                        for entry in parser.navigation_links[:500]
+                        if isinstance(entry, dict) and isinstance(entry.get("href"), str)
+                    ][:300]
                     diagnostic["subpage_candidate_count"] = candidate_count
                     diagnostic["subpage_rejected_link_count"] = rejected
                 candidate_sources = [(item, "anchor_or_metadata") for item in parser.links]
