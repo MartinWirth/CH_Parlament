@@ -183,6 +183,20 @@ async def admin_review(request: Request, language: str = "DE"):
             "candidates": data.get("review_candidates", {})}
 
 
+@router.get("/discovery-report")
+async def admin_discovery_report(request: Request, language: str = "DE", limit: int = 100):
+    """Authenticated summary of the last saved discovery snapshot."""
+    _require(request)
+    if language not in ("DE", "FR", "IT", "RM") or not 1 <= limit <= 500:
+        raise HTTPException(422, "Invalid report parameters")
+    from .main import read_profile_snapshot
+    from .social_review import apply_decisions
+    from .social_discovery_report import discovery_report
+    snapshot = read_profile_snapshot()
+    apply_decisions(snapshot, language)
+    return {"language": language, **discovery_report(snapshot.get(language, {}), limit=limit)}
+
+
 @router.post("/review")
 async def admin_review_decision(request: Request):
     _require(request)
