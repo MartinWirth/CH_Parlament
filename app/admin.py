@@ -267,6 +267,12 @@ async def admin_discovery_script():
                         media_type="text/javascript")
 
 
+@router.get("/directory-health-ui.js")
+async def admin_directory_health_script():
+    return FileResponse(Path(__file__).resolve().parent / "static" / "admin-directory-health.js",
+                        media_type="text/javascript")
+
+
 @router.get("/review-ui.js")
 async def admin_review_script():
     from fastapi.responses import FileResponse
