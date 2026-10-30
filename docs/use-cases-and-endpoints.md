@@ -129,3 +129,7 @@ Alle folgenden Pfade liegen unter `/admin`. `GET /admin` liefert die Login-/Admi
 - `503`: benötigte Admin-/Refresh-Secrets nicht konfiguriert.
 - Netzwerkzugriffe auf externe Homepages sind begrenzt und sicherheitsgeprüft; ein Kandidat beweist keine persönliche Kontoinhaberschaft. Ein Scan kann wegen DNS, TLS, HTTP-Status, Weiterleitung oder Seitendarstellung scheitern.
 - Die API liefert keine garantiert vollständige Sammlung persönlicher Social-Media-Profile. Die Datenqualität hängt von aktuellen offiziellen Quellen und manueller Prüfung ab.
+
+### Automatische gezielte Nachrecherche (Refresh)
+
+Beim bestehenden Social-Profil-Refresh werden bis zu 30 bereits aus Parlamentsdaten bekannte HTTPS-Homepages von Mitgliedern ohne bestätigte Profile erneut mit dem bestehenden SSRF-geschützten Scanner untersucht (maximal vier parallele Anfragen). Gefundene Social-Media-Links werden ausschliesslich als unbestätigte Kandidaten mit Quellen-URL, Prüfzeitpunkt und `auto_accept=false` in die Review-Queue übernommen. Es werden keine unbekannten Domains geraten, keine Suchmaschinen automatisch abgefragt und keine Accounts ohne manuelle Identitätsprüfung publiziert. Der Diagnosebericht enthält `targeted_homepage_discovery`.
