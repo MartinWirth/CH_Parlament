@@ -20,6 +20,32 @@ _login_failures = {}
 _job = {"state": "idle", "started_at": None, "finished_at": None, "error": None}
 _task = None
 SESSION_SECONDS = 3600
+LOGIN_WINDOW_SECONDS = 300
+MAX_LOGIN_FAILURES = 5
+MAX_TRACKED_CLIENTS = 2048
+MAX_ACTIVE_SESSIONS = 2048
+
+
+def _prune_auth_state(now=None):
+    """Remove expired state and enforce process-local memory bounds."""
+    if now is None:
+        now = time.monotonic()
+    for token, expires in list(_sessions.items()):
+        if expires <= now:
+            _sessions.pop(token, None)
+    for client, timestamps in list(_login_failures.items()):
+        recent = [t for t in timestamps if now - t < LOGIN_WINDOW_SECONDS]
+        if recent:
+            _login_failures[client] = recent[-MAX_LOGIN_FAILURES:]
+        else:
+            _login_failures.pop(client, None)
+    while len(_login_failures) > MAX_TRACKED_CLIENTS:
+        oldest = min(_login_failures, key=lambda key: _login_failures[key][-1])
+        _login_failures.pop(oldest, None)
+    while len(_sessions) > MAX_ACTIVE_SESSIONS:
+        oldest = min(_sessions, key=_sessions.get)
+        _sessions.pop(oldest, None)
+
 
 
 def _now():
@@ -34,6 +60,7 @@ def _same_origin(request):
 
 
 def _authorized(request):
+    _prune_auth_state()
     cookie = request.cookies.get("chp_admin")
     if not cookie:
         return False
@@ -62,19 +89,23 @@ async def admin_login(request: Request):
     if not configured or not os.getenv("SOCIAL_REFRESH_TOKEN"):
         raise HTTPException(503, "Admin refresh is not configured")
     client_id = request.client.host if request.client else "unknown"
-    recent = [t for t in _login_failures.get(client_id, []) if time.monotonic() - t < 300]
-    _login_failures[client_id] = recent
-    if len(recent) >= 5:
+    _prune_auth_state()
+    recent = _login_failures.get(client_id, [])
+    if len(recent) >= MAX_LOGIN_FAILURES:
         raise HTTPException(429, "Too many login attempts; retry later")
     data = await request.json()
     password = data.get("password", "") if isinstance(data, dict) else ""
     if not isinstance(password, str) or not secrets.compare_digest(password, configured):
+        if client_id not in _login_failures:
+            _login_failures[client_id] = recent
         recent.append(time.monotonic())
+        _prune_auth_state()
         raise HTTPException(403, "Invalid credentials")
     _login_failures.pop(client_id, None)
     from fastapi.responses import JSONResponse
     token = secrets.token_urlsafe(32)
     _sessions[token] = time.monotonic() + SESSION_SECONDS
+    _prune_auth_state()
     response = JSONResponse({"authenticated": True})
     response.set_cookie("chp_admin", token, max_age=SESSION_SECONDS,
                         httponly=True, secure=True, samesite="strict", path="/admin")
