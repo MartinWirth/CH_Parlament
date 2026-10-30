@@ -133,3 +133,7 @@ Alle folgenden Pfade liegen unter `/admin`. `GET /admin` liefert die Login-/Admi
 ### Automatische gezielte Nachrecherche (Refresh)
 
 Beim bestehenden Social-Profil-Refresh werden bis zu 30 bereits aus Parlamentsdaten bekannte HTTPS-Homepages von Mitgliedern ohne bestätigte Profile erneut mit dem bestehenden SSRF-geschützten Scanner untersucht (maximal vier parallele Anfragen). Gefundene Social-Media-Links werden ausschliesslich als unbestätigte Kandidaten mit Quellen-URL, Prüfzeitpunkt und `auto_accept=false` in die Review-Queue übernommen. Es werden keine unbekannten Domains geraten, keine Suchmaschinen automatisch abgefragt und keine Accounts ohne manuelle Identitätsprüfung publiziert. Der Diagnosebericht enthält `targeted_homepage_discovery`.
+
+### Zusätzliche verifizierte Partei-Mitgliederseiten
+
+Ein Eintrag in `social_regional_party_sources.json` darf optional `additional_profile_urls` (Liste mit maximal drei zusätzlichen HTTPS-Seiten) enthalten. Diese werden nur für Ratsmitglieder ohne bestätigte Social-Media-Profile untersucht. Jede URL muss zum exakt gleichen Host der zuvor manuell verifizierten offiziellen Partei-Mitgliederseite gehören; fremde Hosts, unsichere Protokolle und URLs mit Zugangsdaten werden verworfen. Die Erweiterung verwendet weiterhin den SSRF-geschützten Scanner und übergibt Funde ausschliesslich mit Quellenbeleg und `auto_accept=false` an die manuelle Review-Queue. `regional_party_discovery.explicit_additional_pages` zählt die geprüften Zusatzseiten. Ohne konfigurierte Zusatzseiten erfolgt keine zusätzliche Netzabfrage.
