@@ -141,3 +141,7 @@ Ein Eintrag in `social_regional_party_sources.json` darf optional `additional_pr
 ### Automatische Erkennung offizieller Mitglieder-Unterseiten
 
 Aus bereits verifizierten Partei-Mitgliederseiten werden relevante interne Links automatisch erkannt. Der Scanner folgt maximal zwei neuen HTTPS-Unterseiten pro Mitglied auf demselben Host, priorisiert Personen ohne bestätigte Social-Profile, dedupliziert gegen explizit konfigurierte Zusatzseiten und begrenzt die Gesamtzahl der Unterseiten-Requests auf 200. Die Diagnostik meldet `regional_party_discovery.auto_discovered_subpages`. Entdeckte Social-Links gelangen nur in die manuelle Review-Queue; es erfolgt keine automatische Identitätsbestätigung.
+
+### Kantonale Parteiverzeichnisse
+
+`SOCIAL_CANTONAL_DIRECTORY_SOURCES_PATH` (Standard `social_cantonal_party_directories.json`) definiert manuell verifizierte offizielle kantonale Mitgliederverzeichnisse. Maximal 20 Verzeichnisse und 40 daraus eindeutig anhand des vollständigen Namens im URL-Slug zugeordnete Mitgliederseiten werden über den bestehenden HTTPS-/SSRF-geschützten Scanner geprüft. Unbestätigte Social-Links erscheinen ausschliesslich in der manuellen Review-Queue mit `source_type=verified_cantonal_party_directory`, Quellen-URL und `auto_accept=false`. Der Diagnosebericht enthält `cantonal_directory_discovery`. Die URL-Namensübereinstimmung ist nur ein Recherchehinweis und kein Identitätsnachweis.
