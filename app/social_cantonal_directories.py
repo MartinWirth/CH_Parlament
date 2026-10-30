@@ -91,7 +91,7 @@ async def discover_cantonal_directory_candidates(member_names, verified_social_u
     from .social_evidence import _utc_now
     directories = configured_cantonal_directories(path)
     diagnostic = {"configured": len(directories), "matched_pages": 0,
-                  "parsed_directories": 0, "candidates": 0}
+                  "parsed_directories": 0, "candidates": 0, "sources": []}
     if not directories:
         return {}, diagnostic
     semaphore = asyncio.Semaphore(4)
@@ -101,15 +101,24 @@ async def discover_cantonal_directory_candidates(member_names, verified_social_u
                                          for i, url in enumerate(directories)))
     jobs = {}
     for source, links, report in zip(directories, results, reports):
-        if report.get("status") != "parsed":
+        status = report.get("status") or "unknown"
+        entry = {"url": source, "status": status, "usable": False,
+                 "matched_members": 0}
+        diagnostic["sources"].append(entry)
+        if status != "parsed":
+            entry["reason"] = str(report.get("error") or "fetch_or_parse_failed")[:200]
             continue
         diagnostic["parsed_directories"] += 1
+        entry["usable"] = True
         # Scanner returns social links separately; internal links are in the report.
         internal = report.get("directory_links", []) + report.get("internal_page_candidates", [])
         if isinstance(links, dict):
             internal += [value for value in links.values() if isinstance(value, str)]
-        for number, url in match_directory_links(source, internal, member_names,
-                                                   existing_profiles).items():
+        matches = match_directory_links(source, internal, member_names, existing_profiles)
+        entry["matched_members"] = len(matches)
+        if not matches:
+            entry["reason"] = "no_matching_member_links"
+        for number, url in matches.items():
             jobs.setdefault(number, url)
     jobs = dict(list(jobs.items())[:40])
     diagnostic["matched_pages"] = len(jobs)
