@@ -220,7 +220,8 @@ async def discover_regional_party_candidates(member_names, verified_social_url, 
                     "auto_accept": False,
                     "reason": "official_subpage_link_requires_manual_identity_confirmation",
                 })
-    diagnostic["auto_discovered_subpages"] = auto_discovered\n    diagnostic["explicit_additional_pages"] = len(additional_jobs)
+    diagnostic["auto_discovered_subpages"] = auto_discovered
+    diagnostic["explicit_additional_pages"] = len(additional_jobs)
     diagnostic["subpages_scanned"] = len(subpage_jobs)
     diagnostic["subpages_parsed"] = sum(
         report.get("status") == "parsed" for report in subpage_reports)
