@@ -60,10 +60,12 @@ Alle folgenden Pfade liegen unter `/admin`. `GET /admin` liefert die Login-/Admi
 | POST | `/admin/refresh` | JSON `{"language":"DE","force":false}` | Hintergrund-Refresh starten |
 | GET | `/admin/review` | `language=DE` | Ungeprüfte/zu prüfende Social-Profile aus Snapshot |
 | GET | `/admin/targeted-research` | `language=DE`, `limit=100` (1–500) | Geschützte Nachrecherche-Aufträge für Mitglieder ohne bestätigte Profile; nur gespeicherte Daten |
-| GET | `/admin/directory-source-health` | `language=DE` | Gespeicherte Erreichbarkeit und Nutzbarkeit der Parteiverzeichnis-Quellen |\n| GET | `/admin/discovery-report` | `language=DE`, `limit=100` (1–500) | Geschützter Bericht über Kandidaten, Fundstellen, Abdeckung und Identitätskonflikte aus dem gespeicherten Snapshot |\n| GET | `/admin/discovery-report` | `language=DE`, `limit=100` (1–500) | Geschützter Bericht über Kandidaten, Fundstellen, Abdeckung und Identitätskonflikte aus dem gespeicherten Snapshot |
+| GET | `/admin/directory-source-health` | `language=DE` | Gespeicherte Erreichbarkeit und Nutzbarkeit der Parteiverzeichnis-Quellen |
+| GET | `/admin/discovery-report` | `language=DE`, `limit=100` (1–500) | Geschützter Bericht über Kandidaten, Fundstellen, Abdeckung und Identitätskonflikte aus dem gespeicherten Snapshot |
 | POST | `/admin/review` | JSON mit exakt `language`, `person_number`, `url`, `decision` | Review-Entscheidung für vorhandenen Kandidaten speichern |
 | GET | `/admin/targeted-ui.js` | – | Öffentliches JavaScript der Nachrecherche-Anzeige; API-Daten erfordern Admin-Anmeldung |
-| GET | `/admin/directory-health-ui.js` | – | Statisches JavaScript der Quellenstatus-Anzeige |\n| GET | `/admin/discovery-ui.js` | – | Statisches JavaScript für die Recherche-Abdeckung; öffentlich wie die Admin-Seite |\n| GET | `/admin/discovery-ui.js` | – | Statisches JavaScript für die Recherche-Abdeckung; öffentlich wie die Admin-Seite |
+| GET | `/admin/directory-health-ui.js` | – | Statisches JavaScript der Quellenstatus-Anzeige |
+| GET | `/admin/discovery-ui.js` | – | Statisches JavaScript für die Recherche-Abdeckung; öffentlich wie die Admin-Seite |
 | GET | `/admin/review-ui.js` | – | Statische JavaScript-Datei für Review-Oberfläche; öffentlich |
 | GET | `/admin/quality` | `language=DE` | Audit publizierter Links auf Format und Duplikate |
 | POST | `/admin/live-check` | JSON `{"language":"DE"}` | Erreichbarkeitsprüfung als Hintergrundjob starten |
