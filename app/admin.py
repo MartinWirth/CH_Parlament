@@ -211,6 +211,7 @@ async def admin_directory_source_health(request: Request, language: str = "DE"):
     return {"language": language, "updated_at": snapshot.get("updated_at"),
             "configured": report.get("configured", 0),
             "parsed_directories": report.get("parsed_directories", 0),
+            "persistent_failure_count": report.get("persistent_failure_count", 0),
             "sources": report.get("sources", [])}
 
 @router.get("/targeted-research")
