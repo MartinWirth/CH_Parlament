@@ -1,5 +1,5 @@
 from app.social_targeted_scan import _safe_source, discover_uncovered_homepage_candidates
-import pytest
+import asyncio
 
 
 def test_targeted_source_validation():
@@ -10,20 +10,18 @@ def test_targeted_source_validation():
         assert not _safe_source(url)
 
 
-@pytest.mark.asyncio
-async def test_targeted_scan_does_not_fetch_without_eligible_sources():
-    found, diagnostic = await discover_uncovered_homepage_candidates(
+def test_targeted_scan_does_not_fetch_without_eligible_sources():
+    found, diagnostic = asyncio.run(discover_uncovered_homepage_candidates(
         {"1": "Example"}, {"1": "http://unsafe.invalid"},
-        {}, lambda url: "LinkedIn", checked_at="2026-10-30T00:00:00Z")
+        {}, lambda url: "LinkedIn", checked_at="2026-10-30T00:00:00Z"))
     assert found == {}
     assert diagnostic["eligible_scanned"] == 0
 
 
-@pytest.mark.asyncio
-async def test_targeted_scan_skips_confirmed_members():
+def test_targeted_scan_skips_confirmed_members():
     found, diagnostic = await discover_uncovered_homepage_candidates(
         {"1": "Example"}, {"1": "https://example.org/person"},
         {"1": {"LinkedIn": "https://linkedin.com/in/example"}},
-        lambda url: "LinkedIn", checked_at="2026-10-30T00:00:00Z")
+        lambda url: "LinkedIn", checked_at="2026-10-30T00:00:00Z"))
     assert found == {}
     assert diagnostic["eligible_scanned"] == 0
