@@ -225,6 +225,12 @@ async def admin_review_decision(request: Request):
     return {"ok": True, **record}
 
 
+@router.get("/discovery-ui.js")
+async def admin_discovery_script():
+    return FileResponse(Path(__file__).resolve().parent / "static" / "admin-discovery.js",
+                        media_type="text/javascript")
+
+
 @router.get("/review-ui.js")
 async def admin_review_script():
     from fastapi.responses import FileResponse
