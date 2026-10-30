@@ -115,13 +115,20 @@ async def fetch_communications(language, person_numbers=None):
     url = f"{API.rstrip('/')}/PersonCommunication"
     rows, seen = [], set()
     page_size, max_pages = 1000, 20
+    next_url = None
+    visited_pages = set()
     diagnostic = {"http_status": None, "raw_count": 0, "languages": {}, "communication_types": {}, "error": None, "pages": 0, "truncated": False, "matched_members": 0}
     allowed = {str(n) for n in person_numbers} if person_numbers is not None else None
     try:
         async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
             for page_number in range(max_pages):
-                params = {"$format": "json", "$top": page_size, "$skip": page_number * page_size}
-                response = await client.get(url, params=params)
+                page_url = next_url or url
+                page_key = (page_url, page_number if not next_url else -1)
+                if page_key in visited_pages:
+                    raise ValueError("PersonCommunication pagination loop")
+                visited_pages.add(page_key)
+                params = None if next_url else {"$format": "json", "$top": page_size, "$skip": page_number * page_size}
+                response = await client.get(page_url, params=params)
                 diagnostic["http_status"] = response.status_code
                 response.raise_for_status()
                 payload = response.json()
@@ -138,7 +145,9 @@ async def fetch_communications(language, person_numbers=None):
                     diagnostic["communication_types"][kind] = diagnostic["communication_types"].get(kind, 0) + 1
                     if lang.upper() == language and (allowed is None or str(row.get("PersonNumber")) in allowed):
                         rows.append(row)
-                if len(page) < page_size:
+                next_link = data.get("__next") or data.get("@odata.nextLink") if isinstance(data, dict) else None
+                next_url = str(httpx.URL(next_url or url).join(next_link)) if next_link else None
+                if not next_url and len(page) < page_size:
                     break
             else:
                 diagnostic["truncated"] = True
@@ -273,6 +282,7 @@ _http_response_cache = {}
 _http_response_cache_ttl = 3600
 _http_response_cache_max_entries = 256
 _http_response_cache_max_bytes = 2_000_000
+_http_response_cache_total_max_bytes = 50_000_000
 _http_response_cache_path = Path(os.getenv("HTTP_RESPONSE_CACHE_PATH", str(ROOT.parent / ".http_response_cache.json")))
 _http_response_inflight = {}
 _http_response_cache_lock = None
@@ -353,8 +363,14 @@ def store_http_response(url, response):
             record["reasons"][reason] = record["reasons"].get(reason, 0) + 1
     if reasons:
         return
-    if len(_http_response_cache) >= _http_response_cache_max_entries and url not in _http_response_cache:
-        oldest = min(_http_response_cache, key=lambda key: _http_response_cache[key][0])
+    # Bound both entry count and aggregate memory usage.
+    existing_size = len(_http_response_cache[url][3]) if url in _http_response_cache else 0
+    total_size = sum(len(entry[3]) for entry in _http_response_cache.values()) - existing_size
+    while _http_response_cache and (len(_http_response_cache) >= _http_response_cache_max_entries and url not in _http_response_cache or total_size + len(response.content) > _http_response_cache_total_max_bytes):
+        oldest = min((key for key in _http_response_cache if key != url), key=lambda key: _http_response_cache[key][0], default=None)
+        if oldest is None:
+            break
+        total_size -= len(_http_response_cache[oldest][3])
         _http_response_cache.pop(oldest, None)
         _http_cache_evicted_urls.add(oldest)
     _http_cache_seen_urls.add(url)
@@ -371,13 +387,15 @@ def load_http_response_cache():
         entries = json.loads(_http_response_cache_path.read_text(encoding="utf-8"))
         if not isinstance(entries, dict):
             return
+        total_bytes = 0
         for url, entry in list(entries.items())[:_http_response_cache_max_entries]:
             if (not isinstance(url, str) or not url.startswith("https://") or
                 time.time() - entry["checked_at"] >= _http_response_cache_ttl):
                 continue
             content = base64.b64decode(entry["body"], validate=True)
-            if len(content) > _http_response_cache_max_bytes:
+            if len(content) > _http_response_cache_max_bytes or total_bytes + len(content) > _http_response_cache_total_max_bytes:
                 continue
+            total_bytes += len(content)
             _http_response_cache[url] = (
                 entry["checked_at"], 200,
                 {"content-type": entry["content_type"]}, content)
