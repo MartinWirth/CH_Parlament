@@ -1749,6 +1749,12 @@ async def _run_social_profiles_refresh(language, force):
         member_names, verified_social_url, checked_at=now.isoformat(),
         existing_profiles=profiles)
     merge_review_candidates(review_candidates, regional_discovered)
+    from .social_targeted_scan import discover_uncovered_homepage_candidates
+    targeted_discovered, targeted_diagnostic = await discover_uncovered_homepage_candidates(
+        member_names, current_homepages, profiles, verified_social_url,
+        checked_at=now.isoformat())
+    merge_review_candidates(review_candidates, targeted_discovered)
+    review_diagnostic["targeted_homepage_discovery"] = targeted_diagnostic
     review_diagnostic["regional_party_discovery"] = regional_diagnostic
     review_diagnostic["official_party_discovered"] = sum(
         len(items) for items in discovered_review.values())
