@@ -44,7 +44,10 @@ def configured_cantonal_directories(path=None):
 
 
 def match_directory_links(directory_url, links, member_names, existing_profiles=None):
-    """Only unique exact name-slug matches; ambiguous names are rejected."""
+    """Match a unique full-name URL slug or exact anchor label, never partial names.
+
+    URL and anchor text are research signals only, not proof of identity.
+    """
     directory = urlparse(directory_url)
     profiles = existing_profiles if isinstance(existing_profiles, dict) else {}
     names = {}
@@ -55,23 +58,30 @@ def match_directory_links(directory_url, links, member_names, existing_profiles=
         if slug:
             names.setdefault(slug, []).append(str(number))
     found = {}
-    for url in links[:300]:
+    for item in links[:300]:
+        url = item.get("url") if isinstance(item, dict) else item
+        label = item.get("text", "") if isinstance(item, dict) else ""
         if not isinstance(url, str):
             continue
         try:
             p = urlparse(url)
             if (p.scheme != "https" or p.hostname != directory.hostname
                     or p.username or p.password or p.port not in (None, 443)
-                    or p.query or p.fragment):
+                    or p.query or p.fragment or not p.path.strip("/")):
                 continue
             segment = _slug(unquote(p.path.rstrip("/").split("/")[-1]))
+            label_slug = _slug(label) if isinstance(label, str) else ""
         except (ValueError, UnicodeError):
             continue
-        matches = names.get(segment, [])
+        slug_matches = names.get(segment, [])
+        label_matches = names.get(label_slug, [])
+        # If URL and label each identify different people, reject the link.
+        if slug_matches and label_matches and slug_matches != label_matches:
+            continue
+        matches = slug_matches or label_matches
         if len(matches) == 1 and url != directory_url:
             found.setdefault(matches[0], url)
     return found
-
 
 async def discover_cantonal_directory_candidates(member_names, verified_social_url, *,
                                                    existing_profiles=None, checked_at=None,
@@ -95,7 +105,7 @@ async def discover_cantonal_directory_candidates(member_names, verified_social_u
             continue
         diagnostic["parsed_directories"] += 1
         # Scanner returns social links separately; internal links are in the report.
-        internal = report.get("navigation_links", []) + report.get("internal_page_candidates", [])
+        internal = report.get("directory_links", []) + report.get("internal_page_candidates", [])
         if isinstance(links, dict):
             internal += [value for value in links.values() if isinstance(value, str)]
         for number, url in match_directory_links(source, internal, member_names,
