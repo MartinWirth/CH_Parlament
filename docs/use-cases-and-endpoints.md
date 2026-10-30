@@ -149,3 +149,7 @@ Aus bereits verifizierten Partei-Mitgliederseiten werden relevante interne Links
 ### Kantonale Verzeichnisse mit abweichenden URL-Strukturen
 
 Der HTML-Scanner stellt bis zu 300 Verzeichnis-Anker mit absoluter URL und Linktext als Diagnose bereit. Die kantonale Recherche akzeptiert neben exakten vollständigen Namens-Slugs auch exakt übereinstimmende vollständige Namen im Linktext (z. B. Profil-URL `/p/12345`). Fremde Hosts, URL-Parameter, Fragmente, Zugangsdaten, Namenskonflikte und mehrdeutige Namenszuordnungen werden verworfen. Ein Treffer bleibt immer ein ungeprüfter Review-Kandidat und wird niemals automatisch akzeptiert.
+
+### Verifizierte kantonale Quellen (PR #73)
+
+Die Quellenliste `social_cantonal_party_directories.json` enthält neu zusätzlich die offiziellen Mitgliederverzeichnisse von Die Mitte St. Gallen (`https://sg.die-mitte.ch/menschen/`), Thurgau (`https://tg.die-mitte.ch/menschen/`) und Graubünden (`https://gr.die-mitte.ch/menschen/`). Die bestehenden Grenzen und die manuelle Identitätsprüfung bleiben unverändert. Diese Quellen wurden anhand der öffentlich zugänglichen offiziellen Partei-Webseiten recherchiert; der tatsächliche Scanner-Ertrag wird erst bei einem Refresh sichtbar.
