@@ -153,3 +153,7 @@ Der HTML-Scanner stellt bis zu 300 Verzeichnis-Anker mit absoluter URL und Linkt
 ### Verifizierte kantonale Quellen (PR #73)
 
 Die Quellenliste `social_cantonal_party_directories.json` enthält neu zusätzlich die offiziellen Mitgliederverzeichnisse von Die Mitte St. Gallen (`https://sg.die-mitte.ch/menschen/`), Thurgau (`https://tg.die-mitte.ch/menschen/`) und Graubünden (`https://gr.die-mitte.ch/menschen/`). Die bestehenden Grenzen und die manuelle Identitätsprüfung bleiben unverändert. Diese Quellen wurden anhand der öffentlich zugänglichen offiziellen Partei-Webseiten recherchiert; der tatsächliche Scanner-Ertrag wird erst bei einem Refresh sichtbar.
+
+### Zusätzliche Parteiverzeichnisse (PR #74)
+
+Drei offizielle SVP-Kantonsseiten (Zürich, Bern, Aargau) und die offiziellen nationalen Parlamentsübersichten von FDP, SP und Grünen ergänzen die vier bestehenden kantonalen Quellen. **Hinweis:** Die drei nationalen Übersichten sind keine kantonalen Verzeichnisse, werden aber durch denselben begrenzten Rechercheprozess verarbeitet. Jede Quelle muss weiterhin den Host-/HTTPS-Prüfungen entsprechen; Social-Media-Funde bleiben manuell zu prüfen. Quellen: https://www.svp.ch/partei/kantone/zuerich/ ; https://www.svp.ch/partei/kantone/bern/ ; https://www.svp.ch/partei/kantone/aargau/ ; https://www.fdp.ch/partei/organe/fraktion/ ; https://www.sp-ps.ch/menschen/national-und-staenderat/ ; https://gruene.ch/gruene-im-bundeshaus .
