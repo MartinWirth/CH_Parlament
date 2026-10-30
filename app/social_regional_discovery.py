@@ -77,6 +77,33 @@ async def discover_regional_party_candidates(member_names, verified_social_url, 
         results = await asyncio.gather(*(
             scan_homepage(client, url, semaphore, reports[index])
             for index, url in enumerate(pages.values())))
+    # Inspect up to two relevant same-host subpages of each curated person page.
+    # The shared scanner enforces HTTPS, public destinations and redirect safety.
+    subpage_jobs = []
+    for (number, source), report in zip(pages.items(), reports):
+        if report.get("status") != "parsed":
+            continue
+        for suburl in report.get("internal_page_candidates", [])[:2]:
+            if not isinstance(suburl, str):
+                continue
+            try:
+                parent, child = urlparse(source), urlparse(suburl)
+                allowed = (child.scheme == "https" and child.hostname == parent.hostname
+                           and not child.username and not child.password
+                           and child.port in (None, 443) and not child.query
+                           and not child.fragment and child.path != parent.path)
+            except (ValueError, UnicodeError):
+                allowed = False
+            if allowed:
+                subpage_jobs.append((number, suburl))
+    subpage_reports = [{} for _ in subpage_jobs]
+    if subpage_jobs:
+        async with PublicHTTPSClient(timeout=8, headers={"User-Agent": "CH-Parlament/1.0"}) as client:
+            subpage_links = await asyncio.gather(*(
+                scan_homepage(client, url, semaphore, subpage_reports[index])
+                for index, (_, url) in enumerate(subpage_jobs)))
+    else:
+        subpage_links = []
     found = {}
     for (number, source), links, report in zip(pages.items(), results, reports):
         if report.get("status") != "parsed":
@@ -101,6 +128,32 @@ async def discover_regional_party_candidates(member_names, verified_social_url, 
                 "auto_accept": False,
                 "reason": "official_page_link_requires_manual_identity_confirmation",
             })
+    for (number, source), links, report in zip(subpage_jobs, subpage_links, subpage_reports):
+        if report.get("status") != "parsed":
+            continue
+        candidates = (list(links.values()) + report.get("social_url_candidates", [])
+                      + report.get("raw_social_urls", []) + report.get("data_social_urls", []))
+        seen = set()
+        for url in candidates[:100]:
+            if not isinstance(url, str) or url in seen:
+                continue
+            seen.add(url)
+            try:
+                platform = verified_social_url(url)
+            except (ValueError, UnicodeError):
+                continue
+            if platform:
+                found.setdefault(number, []).append({
+                    "platform": platform, "url": url,
+                    "source_type": "curated_regional_party_person_page",
+                    "source_url": source, "checked_at": checked_at,
+                    "verification_status": "requires_identity_verification",
+                    "auto_accept": False,
+                    "reason": "official_subpage_link_requires_manual_identity_confirmation",
+                })
+    diagnostic["subpages_scanned"] = len(subpage_jobs)
+    diagnostic["subpages_parsed"] = sum(
+        report.get("status") == "parsed" for report in subpage_reports)
     diagnostic["candidates"] = sum(len(items) for items in found.values())
     diagnostic["scanned"] = len(pages)
     diagnostic["scanned_without_confirmed_profiles"] = sum(
