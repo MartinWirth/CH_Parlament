@@ -1755,6 +1755,12 @@ async def _run_social_profiles_refresh(language, force):
         checked_at=now.isoformat())
     merge_review_candidates(review_candidates, targeted_discovered)
     review_diagnostic["targeted_homepage_discovery"] = targeted_diagnostic
+    from .social_cantonal_directories import discover_cantonal_directory_candidates
+    cantonal_discovered, cantonal_diagnostic = await discover_cantonal_directory_candidates(
+        member_names, verified_social_url, existing_profiles=profiles,
+        checked_at=now.isoformat())
+    merge_review_candidates(review_candidates, cantonal_discovered)
+    review_diagnostic["cantonal_directory_discovery"] = cantonal_diagnostic
     review_diagnostic["regional_party_discovery"] = regional_diagnostic
     review_diagnostic["official_party_discovered"] = sum(
         len(items) for items in discovered_review.values())
