@@ -70,4 +70,4 @@ def test_quality_detects_www_mobile_duplicates():
     }
     report = audit_profiles(profiles, verified_social_url)
     assert report["duplicates"] == 2
-    assert canonical_url("https://m.facebook.com/profile.php?id=123") == "https://facebook.com/profile.php?id=123"
+    assert canonical_url("https://m.facebook.com/profile.php?id=123") == "https://www.facebook.com/profile.php?id=123"

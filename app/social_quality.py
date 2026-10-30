@@ -33,13 +33,13 @@ def canonical_url(url):
             return None
         path = parsed.path.rstrip("/") or "/"
         host = parsed.hostname.lower().rstrip(".")
-        bare_host = host[4:] if host.startswith("www.") else host[2:] if host.startswith("m.") else host
-        if bare_host in {"facebook.com", "instagram.com", "linkedin.com", "youtube.com", "x.com", "twitter.com"}:
-            host = bare_host
+        # Keep existing canonical URLs stable for persisted review decisions.
+        if host == "m.facebook.com":
+            host = "www.facebook.com"
         query = ""
         # Facebook's legacy profile.php route identifies the account by its id
         # query parameter. Dropping it would merge unrelated people's profiles.
-        if host == "facebook.com" and path.lower() == "/profile.php":
+        if host in ("facebook.com", "www.facebook.com") and path.lower() == "/profile.php":
             pairs = parse_qsl(parsed.query, keep_blank_values=True, max_num_fields=100)
             identifiers = [value for key, value in pairs if key == "id"]
             if len(identifiers) != 1 or not identifiers[0].strip():
