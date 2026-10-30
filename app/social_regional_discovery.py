@@ -20,7 +20,7 @@ def _official_host(host):
                               for domain in PARTY_DOMAINS)
 
 
-def configured_regional_pages(member_names, path=None):
+def configured_regional_pages(member_names, path=None, *, existing_profiles=None):
     path = Path(path or os.getenv("SOCIAL_REGIONAL_PARTY_SOURCES_PATH",
                                  "social_regional_party_sources.json"))
     try:
@@ -51,18 +51,24 @@ def configured_regional_pages(member_names, path=None):
             rejected += 1
             continue
         result[number] = url
+    # Prioritize members with no confirmed profiles while retaining coverage
+    # of members with partial profiles and their other platforms.
+    existing_profiles = existing_profiles if isinstance(existing_profiles, dict) else {}
+    result = dict(sorted(result.items(), key=lambda pair: (
+        bool(existing_profiles.get(pair[0])), pair[0])))
     return result, {"configured": len(entries), "accepted": len(result),
                     "rejected": rejected + max(0, len(entries) - 200)}
 
 
 async def discover_regional_party_candidates(member_names, verified_social_url, *, path=None,
-                                              checked_at=None):
+                                              checked_at=None, existing_profiles=None):
     """Inspect at most 200 curated official person pages; require manual review."""
     from .main import scan_homepage
     from .public_https import PublicHTTPSClient
     from .social_evidence import _utc_now
     checked_at = checked_at or _utc_now()
-    pages, diagnostic = configured_regional_pages(member_names, path)
+    pages, diagnostic = configured_regional_pages(
+        member_names, path, existing_profiles=existing_profiles)
     if not pages:
         return {}, diagnostic
     semaphore = asyncio.Semaphore(4)
@@ -97,4 +103,6 @@ async def discover_regional_party_candidates(member_names, verified_social_url, 
             })
     diagnostic["candidates"] = sum(len(items) for items in found.values())
     diagnostic["scanned"] = len(pages)
+    diagnostic["scanned_without_confirmed_profiles"] = sum(
+        not bool((existing_profiles or {}).get(number)) for number in pages)
     return found, diagnostic
