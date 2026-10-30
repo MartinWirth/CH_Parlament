@@ -10,7 +10,9 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 PARTY_DOMAINS = ("svp.ch", "fdp.ch", "sp-ps.ch", "die-mitte.ch",
-                 "gruene.ch", "glp.swiss", "evppev.ch")
+                 "gruene.ch", "glp.swiss", "evppev.ch",
+                 "pssuisse.ch", "lesverts.ch", "plr.ch", "le-centre.ch",
+                 "udc.ch", "vertliberaux.ch")
 
 
 def _official_host(host):
@@ -28,7 +30,7 @@ def configured_regional_pages(member_names, path=None):
     if not isinstance(entries, list):
         return {}, {"configured": 0, "accepted": 0, "rejected": 1}
     result, rejected = {}, 0
-    for item in entries[:100]:
+    for item in entries[:200]:
         if not isinstance(item, dict):
             rejected += 1
             continue
@@ -50,12 +52,12 @@ def configured_regional_pages(member_names, path=None):
             continue
         result[number] = url
     return result, {"configured": len(entries), "accepted": len(result),
-                    "rejected": rejected + max(0, len(entries) - 100)}
+                    "rejected": rejected + max(0, len(entries) - 200)}
 
 
 async def discover_regional_party_candidates(member_names, verified_social_url, *, path=None,
                                               checked_at=None):
-    """Inspect at most 100 curated pages, putting every candidate into review."""
+    """Inspect at most 200 curated official person pages; require manual review."""
     from .main import scan_homepage
     from .public_https import PublicHTTPSClient
     from .social_evidence import _utc_now
