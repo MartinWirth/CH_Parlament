@@ -22,7 +22,7 @@ def test_regional_links_are_review_only(monkeypatch):
     import app.social_regional_discovery as discovery
     from app.main import verified_social_url
     monkeypatch.setattr(discovery, "configured_regional_pages",
-                        lambda names, path: ({"1": "https://zh.glp.swiss/personen/ada"}, {"accepted": 1}))
+                        lambda names, path, *, existing_profiles=None: ({"1": "https://zh.glp.swiss/personen/ada"}, {"accepted": 1}))
     async def scan(client, url, semaphore, diagnostic):
         diagnostic["status"] = "parsed"
         diagnostic["social_url_candidates"] = ["https://instagram.com/ada",
