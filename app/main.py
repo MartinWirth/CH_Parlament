@@ -116,13 +116,19 @@ async def fetch_communications(language, person_numbers=None):
     rows, seen = [], set()
     page_size, max_pages = 1000, 20
     next_url = None
+    visited_pages = set()
     diagnostic = {"http_status": None, "raw_count": 0, "languages": {}, "communication_types": {}, "error": None, "pages": 0, "truncated": False, "matched_members": 0}
     allowed = {str(n) for n in person_numbers} if person_numbers is not None else None
     try:
         async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
             for page_number in range(max_pages):
+                page_url = next_url or url
+                page_key = (page_url, page_number if not next_url else -1)
+                if page_key in visited_pages:
+                    raise ValueError("PersonCommunication pagination loop")
+                visited_pages.add(page_key)
                 params = None if next_url else {"$format": "json", "$top": page_size, "$skip": page_number * page_size}
-                response = await client.get(next_url or url, params=params)
+                response = await client.get(page_url, params=params)
                 diagnostic["http_status"] = response.status_code
                 response.raise_for_status()
                 payload = response.json()
@@ -381,13 +387,15 @@ def load_http_response_cache():
         entries = json.loads(_http_response_cache_path.read_text(encoding="utf-8"))
         if not isinstance(entries, dict):
             return
+        total_bytes = 0
         for url, entry in list(entries.items())[:_http_response_cache_max_entries]:
             if (not isinstance(url, str) or not url.startswith("https://") or
                 time.time() - entry["checked_at"] >= _http_response_cache_ttl):
                 continue
             content = base64.b64decode(entry["body"], validate=True)
-            if len(content) > _http_response_cache_max_bytes:
+            if len(content) > _http_response_cache_max_bytes or total_bytes + len(content) > _http_response_cache_total_max_bytes:
                 continue
+            total_bytes += len(content)
             _http_response_cache[url] = (
                 entry["checked_at"], 200,
                 {"content-type": entry["content_type"]}, content)
