@@ -157,3 +157,7 @@ Die Quellenliste `social_cantonal_party_directories.json` enthält neu zusätzli
 ### Zusätzliche Parteiverzeichnisse (PR #74)
 
 Drei offizielle SVP-Kantonsseiten (Zürich, Bern, Aargau) und die offiziellen nationalen Parlamentsübersichten von FDP, SP und Grünen ergänzen die vier bestehenden kantonalen Quellen. **Hinweis:** Die drei nationalen Übersichten sind keine kantonalen Verzeichnisse, werden aber durch denselben begrenzten Rechercheprozess verarbeitet. Jede Quelle muss weiterhin den Host-/HTTPS-Prüfungen entsprechen; Social-Media-Funde bleiben manuell zu prüfen. Quellen: https://www.svp.ch/partei/kantone/zuerich/ ; https://www.svp.ch/partei/kantone/bern/ ; https://www.svp.ch/partei/kantone/aargau/ ; https://www.fdp.ch/partei/organe/fraktion/ ; https://www.sp-ps.ch/menschen/national-und-staenderat/ ; https://gruene.ch/gruene-im-bundeshaus .
+
+### Diagnose der Parteiverzeichnis-Quellen (PR #75)
+
+Bei jedem Social-Media-Refresh erfasst `cantonal_directory_discovery.sources` für jede konfigurierte Quelle die URL, den Scanner-Status, `usable`, `matched_members` und gegebenenfalls `reason` (Abruf-/Parsingfehler oder `no_matching_member_links`). `usable=true` bedeutet nur, dass die Seite geparst werden konnte; es bestätigt nicht, dass sie tatsächlich Personenprofile liefert. Fehlerhafte Quellen werden nicht automatisch entfernt. Die Prüfung nutzt die bereits vorhandenen SSRF-geschützten Scans; es werden keine zusätzlichen Netzwerkanfragen ausgelöst.
