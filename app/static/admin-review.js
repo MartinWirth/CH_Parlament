@@ -9,15 +9,17 @@ function reviewStatistics(entries){
   for(const entry of entries)counts[reviewState(entry.item)]++;
   return counts;
 }
-function reviewFiltered(entries,search,status,platform,sort){
+function reviewFiltered(entries,search,status,platform,sort,minPriority=0){
   const needle=search.trim().toLocaleLowerCase("de");
   return entries.filter(({number,item})=>{
     const haystack=[number,item.name,item.platform,item.url,item.source_url]
       .filter(v=>typeof v==="string").join(" ").toLocaleLowerCase("de");
     return (!needle||haystack.includes(needle))&&
       (status==="all"||reviewState(item)===status)&&
-      (platform==="all"||item.platform===platform);
+      (platform==="all"||item.platform===platform)&&
+      (Number(item.review_priority_score||0)>=minPriority);
   }).sort((a,b)=>{
+    if(sort==="priority")return (Number(b.item.review_priority_score||0)-Number(a.item.review_priority_score||0))||String(a.number).localeCompare(String(b.number),"de",{numeric:true});
     const value=e=>sort==="platform"?String(e.item.platform||""):
       sort==="status"?reviewState(e.item):String(e.item.name||e.number);
     return value(a).localeCompare(value(b),"de",{numeric:true})||
@@ -31,7 +33,7 @@ function renderReview(){
   $("review-stats").textContent="Gesamt: "+stats.all+" · Ungeprüft: "+stats.pending+
     " · Bestätigt: "+stats.approved+" · Verworfen: "+stats.rejected;
   const entries=reviewFiltered(reviewEntries,$("review-search").value,
-    $("review-status").value,$("review-platform").value,$("review-sort").value);
+    $("review-status").value,$("review-platform").value,$("review-sort").value,Number($("review-priority").value));
   $("review-count").textContent=entries.length+" von "+reviewEntries.length+" Kandidaten angezeigt";
   if(!entries.length){container.textContent="Keine passenden Kandidaten.";return;}
   for(const {number,item} of entries){
@@ -40,6 +42,10 @@ function renderReview(){
     title.textContent=(item.name||"Mitglied "+number)+" · "+item.platform+" · "+
       ({pending:"Ungeprüft",approved:"Bestätigt",rejected:"Verworfen"}[reviewState(item)]);
     panel.append(title);
+    const priority=document.createElement("p");
+    priority.textContent="Prüfpriorität: "+Number(item.review_priority_score||0)+" · "+
+      (Array.isArray(item.review_priority_reasons)?item.review_priority_reasons.join(", "):"Keine Bewertung");
+    panel.append(priority);
     for(const [label,url] of [["Profil",item.url],["Quelle",item.source_url]]){
       if(typeof url!=="string"||!url.startsWith("https://"))continue;
       const p=document.createElement("p"),a=document.createElement("a");
@@ -64,7 +70,7 @@ function renderReview(){
     container.append(panel);
   }
 }
-for(const id of ["review-search","review-status","review-platform","review-sort"]){
+for(const id of ["review-search","review-status","review-platform","review-sort","review-priority"]){
   $(id).addEventListener(id==="review-search"?"input":"change",renderReview);
 }
 $("language").addEventListener("change",()=>{
