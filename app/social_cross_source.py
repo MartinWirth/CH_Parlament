@@ -38,6 +38,12 @@ def annotate_cross_source(queue, profiles=None):
             source = canonical_url(item.get("source_url"))
             if key and source:
                 observations[key].add(source)
+            if key and isinstance(item.get("source_observations"), list):
+                for observation in item["source_observations"]:
+                    if isinstance(observation, dict):
+                        extra = canonical_url(observation.get("source_url"))
+                        if extra:
+                            observations[key].add(extra)
         for item in entries:
             if not isinstance(item, dict):
                 continue
