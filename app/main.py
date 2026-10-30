@@ -1775,7 +1775,8 @@ async def _run_social_profiles_refresh(language, force):
         len(entries) for entries in homepage_discovered.values())
     from .social_regional_discovery import discover_regional_party_candidates
     regional_discovered, regional_diagnostic = await discover_regional_party_candidates(
-        member_names, verified_social_url, checked_at=now.isoformat())
+        member_names, verified_social_url, checked_at=now.isoformat(),
+        existing_profiles=profiles)
     merge_review_candidates(review_candidates, regional_discovered)
     review_diagnostic["regional_party_discovery"] = regional_diagnostic
     review_diagnostic["official_party_discovered"] = sum(
