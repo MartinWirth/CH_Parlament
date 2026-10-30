@@ -167,3 +167,7 @@ Bei jedem Social-Media-Refresh erfasst `cantonal_directory_discovery.sources` f�
 ### Admin-Ansicht Quellenstatus (PR #76)
 
 Der authentifizierte Endpunkt `GET /admin/directory-source-health?language=DE` liest den zuletzt gespeicherten Snapshot (`debug.review_candidates.cantonal_directory_discovery`). Das Admin-Dashboard zeigt URL, Scanner-Status, Anzahl gefundener Mitglieder und Fehler-/Hinweisgrund in einer Tabelle. Keine zus채tzlichen Netzwerkanfragen und keine automatische Quellenfreigabe. Ohne vorherigen Refresh erscheint ein Hinweis, dass noch keine Quelldiagnose vorhanden ist.
+
+### Wiederholt fehlerhafte Parteiverzeichnisse (PR #77)
+
+Jeder erfolgreiche Social-Media-Refresh vergleicht den Quellenstatus mit dem vorherigen gespeicherten Snapshot derselben Sprache. Nach drei aufeinanderfolgenden Scan-/Parse-Fehlern derselben URL wird `persistent_failure=true` gesetzt; `failure_streak` zeigt die Anzahl aufeinanderfolgender Fehler (maximal 999). Ein erfolgreich geparstes Verzeichnis setzt den Z채hler zur체ck, auch wenn keine passenden Mitglieder gefunden wurden. Neue URLs beginnen bei null. Die Admin-Quellenstatus-Tabelle zeigt den Fehlerz채hler und kennzeichnet dauerhaft fehlerhafte Quellen; die API liefert `persistent_failure_count`. Die Kennzeichnung ist eine manuelle Pr체fempfehlung: Quellen werden nicht automatisch deaktiviert und keine Identit채ten automatisch best채tigt. Der Verlauf ist nur so dauerhaft wie der gespeicherte Snapshot.
