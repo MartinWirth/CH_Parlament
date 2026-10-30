@@ -1799,6 +1799,8 @@ async def _run_social_profiles_refresh(language, force):
         len(items) for items in discovered_review.values())
     review_diagnostic["total_for_review"] = sum(
         len(items) for items in review_candidates.values())
+    from .social_candidate_priority import annotate_candidates
+    annotate_candidates(review_candidates)
     # Candidates are separate from profiles: never promote a search result to
     # a verified personal account without independent identity confirmation.
     member_homepages = {str(row.get("PersonNumber")) for row in communications if str(row.get("CommunicationTypeText", "")).lower() in ("homepage", "page d'accueil", "sito internet") and homepage_url(row.get("Address"))}
