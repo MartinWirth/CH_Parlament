@@ -1765,35 +1765,18 @@ async def _run_social_profiles_refresh(language, force):
         checked_at=now.isoformat())
     discovered_review = discover_party_review_candidates(
         party_diagnostic, member_names, verified_social_url, now.isoformat())
-    for number, entries in discovered_review.items():
-        existing = review_candidates.setdefault(number, [])
-        known = {item["url"] for item in existing}
-        for entry in entries:
-            if entry["url"] not in known:
-                existing.append(entry)
-                known.add(entry["url"])
+    from .social_candidate_merge import merge_review_candidates
+    merge_review_candidates(review_candidates, discovered_review)
     homepage_discovered = discover_personal_homepage_review_candidates(
         homepage_report, member_names, current_homepages, verified_social_url,
         now.isoformat())
-    for number, entries in homepage_discovered.items():
-        existing = review_candidates.setdefault(number, [])
-        known = {item["url"] for item in existing}
-        for entry in entries:
-            if entry["url"] not in known:
-                existing.append(entry)
-                known.add(entry["url"])
+    merge_review_candidates(review_candidates, homepage_discovered)
     review_diagnostic["personal_homepage_discovered"] = sum(
         len(entries) for entries in homepage_discovered.values())
     from .social_regional_discovery import discover_regional_party_candidates
     regional_discovered, regional_diagnostic = await discover_regional_party_candidates(
         member_names, verified_social_url, checked_at=now.isoformat())
-    for number, entries in regional_discovered.items():
-        existing = review_candidates.setdefault(number, [])
-        known = {item["url"] for item in existing}
-        for entry in entries:
-            if entry["url"] not in known:
-                existing.append(entry)
-                known.add(entry["url"])
+    merge_review_candidates(review_candidates, regional_discovered)
     review_diagnostic["regional_party_discovery"] = regional_diagnostic
     review_diagnostic["official_party_discovered"] = sum(
         len(items) for items in discovered_review.values())
