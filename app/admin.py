@@ -197,6 +197,20 @@ async def admin_discovery_report(request: Request, language: str = "DE", limit: 
     return {"language": language, **discovery_report(snapshot.get(language, {}), limit=limit)}
 
 
+@router.get("/targeted-research")
+async def admin_targeted_research(request: Request, language: str = "DE", limit: int = 100):
+    """Read-only worklist for uncovered members; never auto-assign identities."""
+    _require(request)
+    if language not in ("DE", "FR", "IT", "RM") or not 1 <= limit <= 500:
+        raise HTTPException(422, "Invalid research parameters")
+    from .main import read_profile_snapshot
+    from .social_review import apply_decisions
+    from .social_targeted_research import targeted_research_queue
+    snapshot = read_profile_snapshot()
+    apply_decisions(snapshot, language)
+    return {"language": language, **targeted_research_queue(snapshot.get(language, {}), limit=limit)}
+
+
 @router.post("/review")
 async def admin_review_decision(request: Request):
     _require(request)
@@ -223,6 +237,12 @@ async def admin_review_decision(request: Request):
             raise HTTPException(404, "Candidate not found")
         save_profile_snapshot(snapshot)
     return {"ok": True, **record}
+
+
+@router.get("/targeted-ui.js")
+async def admin_targeted_script():
+    return FileResponse(Path(__file__).resolve().parent / "static" / "admin-targeted.js",
+                        media_type="text/javascript")
 
 
 @router.get("/discovery-ui.js")

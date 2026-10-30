@@ -32,6 +32,11 @@ button{cursor:pointer}button:disabled{cursor:wait;opacity:.6}
 <div id="coverage-sources"></div>
 <h4>Priorisierte manuelle Prüfung</h4>
 <div id="coverage-candidates"></div>
+<h3>Gezielte Nachrecherche: Mitglieder ohne bestätigte Profile</h3>
+<p>Suchhinweise sind keine Identitätsnachweise. Nur offizielle Fundstellen und eindeutig zugeordnete persönliche Accounts dürfen nach manueller Prüfung bestätigt werden.</p>
+<button id="targeted-load" type="button">Nachrecherche-Aufträge laden</button>
+<p id="targeted-status" role="status"></p>
+<div id="targeted-results"></div>
 <h2>Profilaktualisierung</h2>
 <label>Sprache <select id="language"><option>DE</option><option>FR</option><option>IT</option><option>RM</option></select></label>
 <label><input type="checkbox" id="force"> Aktualisierung erzwingen</label>
@@ -81,6 +86,7 @@ $("logout").addEventListener("click",async()=>{
 });
 </script>
 <script src="/admin/discovery-ui.js"></script>
+<script src="/admin/targeted-ui.js"></script>
 <script src="/admin/review-ui.js"></script>
 <script>
 $("quality-load").addEventListener("click",async()=>{
