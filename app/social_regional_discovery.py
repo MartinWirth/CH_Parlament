@@ -136,6 +136,9 @@ async def discover_regional_party_candidates(member_names, verified_social_url, 
     subpage_jobs = list(additional_jobs)
     seen_jobs = set(subpage_jobs)
     auto_discovered = 0
+    jobs_per_member = {}
+    for number, _ in subpage_jobs:
+        jobs_per_member[number] = jobs_per_member.get(number, 0) + 1
     profiles = existing_profiles if isinstance(existing_profiles, dict) else {}
     # Automatically follow relevant same-host links exposed by verified person
     # pages. Prioritize uncovered members and cap the total request budget.
@@ -144,7 +147,7 @@ async def discover_regional_party_candidates(member_names, verified_social_url, 
         report = reports[list(pages).index(number)]
         if report.get("status") != "parsed":
             continue
-        per_member = 0
+        per_member = jobs_per_member.get(number, 0)
         for suburl in report.get("internal_page_candidates", [])[:10]:
             if not isinstance(suburl, str):
                 continue
