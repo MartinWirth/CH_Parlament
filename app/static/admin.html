@@ -32,7 +32,7 @@ button{cursor:pointer}button:disabled{cursor:wait;opacity:.6}
 <div id="coverage-sources"></div>
 <h4>Priorisierte manuelle Prüfung</h4>
 <div id="coverage-candidates"></div>
-<h3>Gezielte Nachrecherche: Mitglieder ohne bestätigte Profile</h3>
+<h3>Parteiverzeichnisse: Quellenstatus</h3><p>Ergebnisse des letzten gespeicherten Social-Media-Refreshs; keine Live-Abfrage.</p><button id="directory-health-load" type="button">Quellenstatus laden</button><p id="directory-health-summary" role="status"></p><div id="directory-health-results"></div><h3>Gezielte Nachrecherche: Mitglieder ohne bestätigte Profile</h3>
 <p>Suchhinweise sind keine Identitätsnachweise. Nur offizielle Fundstellen und eindeutig zugeordnete persönliche Accounts dürfen nach manueller Prüfung bestätigt werden.</p>
 <button id="targeted-load" type="button">Nachrecherche-Aufträge laden</button>
 <p id="targeted-status" role="status"></p>
@@ -85,7 +85,7 @@ $("logout").addEventListener("click",async()=>{
   showLogin();
 });
 </script>
-<script src="/admin/discovery-ui.js"></script>
+<script src="/admin/discovery-ui.js"></script>\n<script src="/admin/directory-health-ui.js"></script>
 <script src="/admin/targeted-ui.js"></script>
 <script src="/admin/review-ui.js"></script>
 <script>

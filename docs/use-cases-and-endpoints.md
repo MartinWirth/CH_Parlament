@@ -60,9 +60,11 @@ Alle folgenden Pfade liegen unter `/admin`. `GET /admin` liefert die Login-/Admi
 | POST | `/admin/refresh` | JSON `{"language":"DE","force":false}` | Hintergrund-Refresh starten |
 | GET | `/admin/review` | `language=DE` | Ungeprüfte/zu prüfende Social-Profile aus Snapshot |
 | GET | `/admin/targeted-research` | `language=DE`, `limit=100` (1–500) | Geschützte Nachrecherche-Aufträge für Mitglieder ohne bestätigte Profile; nur gespeicherte Daten |
+| GET | `/admin/directory-source-health` | `language=DE` | Gespeicherte Erreichbarkeit und Nutzbarkeit der Parteiverzeichnis-Quellen |
 | GET | `/admin/discovery-report` | `language=DE`, `limit=100` (1–500) | Geschützter Bericht über Kandidaten, Fundstellen, Abdeckung und Identitätskonflikte aus dem gespeicherten Snapshot |
 | POST | `/admin/review` | JSON mit exakt `language`, `person_number`, `url`, `decision` | Review-Entscheidung für vorhandenen Kandidaten speichern |
 | GET | `/admin/targeted-ui.js` | – | Öffentliches JavaScript der Nachrecherche-Anzeige; API-Daten erfordern Admin-Anmeldung |
+| GET | `/admin/directory-health-ui.js` | – | Statisches JavaScript der Quellenstatus-Anzeige |
 | GET | `/admin/discovery-ui.js` | – | Statisches JavaScript für die Recherche-Abdeckung; öffentlich wie die Admin-Seite |
 | GET | `/admin/review-ui.js` | – | Statische JavaScript-Datei für Review-Oberfläche; öffentlich |
 | GET | `/admin/quality` | `language=DE` | Audit publizierter Links auf Format und Duplikate |
@@ -161,3 +163,7 @@ Drei offizielle SVP-Kantonsseiten (Zürich, Bern, Aargau) und die offiziellen na
 ### Diagnose der Parteiverzeichnis-Quellen (PR #75)
 
 Bei jedem Social-Media-Refresh erfasst `cantonal_directory_discovery.sources` für jede konfigurierte Quelle die URL, den Scanner-Status, `usable`, `matched_members` und gegebenenfalls `reason` (Abruf-/Parsingfehler oder `no_matching_member_links`). `usable=true` bedeutet nur, dass die Seite geparst werden konnte; es bestätigt nicht, dass sie tatsächlich Personenprofile liefert. Fehlerhafte Quellen werden nicht automatisch entfernt. Die Prüfung nutzt die bereits vorhandenen SSRF-geschützten Scans; es werden keine zusätzlichen Netzwerkanfragen ausgelöst.
+
+### Admin-Ansicht Quellenstatus (PR #76)
+
+Der authentifizierte Endpunkt `GET /admin/directory-source-health?language=DE` liest den zuletzt gespeicherten Snapshot (`debug.review_candidates.cantonal_directory_discovery`). Das Admin-Dashboard zeigt URL, Scanner-Status, Anzahl gefundener Mitglieder und Fehler-/Hinweisgrund in einer Tabelle. Keine zusätzlichen Netzwerkanfragen und keine automatische Quellenfreigabe. Ohne vorherigen Refresh erscheint ein Hinweis, dass noch keine Quelldiagnose vorhanden ist.

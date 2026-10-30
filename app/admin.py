@@ -197,6 +197,22 @@ async def admin_discovery_report(request: Request, language: str = "DE", limit: 
     return {"language": language, **discovery_report(snapshot.get(language, {}), limit=limit)}
 
 
+
+@router.get("/directory-source-health")
+async def admin_directory_source_health(request: Request, language: str = "DE"):
+    """Read-only per-source diagnostics from the most recent saved refresh."""
+    _require(request)
+    if language not in ("DE", "FR", "IT", "RM"):
+        raise HTTPException(422, "Invalid language")
+    from .main import read_profile_snapshot
+    snapshot = read_profile_snapshot().get(language, {})
+    report = snapshot.get("debug", {}).get("review_candidates", {}).get(
+        "cantonal_directory_discovery", {})
+    return {"language": language, "updated_at": snapshot.get("updated_at"),
+            "configured": report.get("configured", 0),
+            "parsed_directories": report.get("parsed_directories", 0),
+            "sources": report.get("sources", [])}
+
 @router.get("/targeted-research")
 async def admin_targeted_research(request: Request, language: str = "DE", limit: int = 100):
     """Read-only worklist for uncovered members; never auto-assign identities."""
@@ -248,6 +264,12 @@ async def admin_targeted_script():
 @router.get("/discovery-ui.js")
 async def admin_discovery_script():
     return FileResponse(Path(__file__).resolve().parent / "static" / "admin-discovery.js",
+                        media_type="text/javascript")
+
+
+@router.get("/directory-health-ui.js")
+async def admin_directory_health_script():
+    return FileResponse(Path(__file__).resolve().parent / "static" / "admin-directory-health.js",
                         media_type="text/javascript")
 
 
