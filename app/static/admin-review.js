@@ -46,6 +46,11 @@ function renderReview(){
     priority.textContent="Prüfpriorität: "+Number(item.review_priority_score||0)+" · "+
       (Array.isArray(item.review_priority_reasons)?item.review_priority_reasons.join(", "):"Keine Bewertung");
     panel.append(priority);
+    const evidence=document.createElement("p");
+    evidence.textContent="Unabhängige Quellseiten: "+Number(item.independent_source_count||0)+
+      (Array.isArray(item.identity_conflict_person_numbers)&&item.identity_conflict_person_numbers.length?
+        " · Mögliche Fehlzuordnung (Mitglied-Nr.: "+item.identity_conflict_person_numbers.join(", ")+")":"");
+    panel.append(evidence);
     for(const [label,url] of [["Profil",item.url],["Quelle",item.source_url]]){
       if(typeof url!=="string"||!url.startsWith("https://"))continue;
       const p=document.createElement("p"),a=document.createElement("a");
