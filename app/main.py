@@ -1770,6 +1770,7 @@ async def _run_social_profiles_refresh(language, force):
     from .social_directory_trends import annotate_directory_failures
     previous_directory_report = (previous.get("debug", {})
         .get("review_candidates", {}).get("cantonal_directory_discovery", {}))
+    cantonal_diagnostic["checked_at"] = now.isoformat()
     annotate_directory_failures(cantonal_diagnostic, previous_directory_report)
     review_diagnostic["cantonal_directory_discovery"] = cantonal_diagnostic
     review_diagnostic["regional_party_discovery"] = regional_diagnostic
