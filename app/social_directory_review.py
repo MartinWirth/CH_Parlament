@@ -114,6 +114,52 @@ def restore_backup():
         return {"reviews": len(saved["reviews"]), "events": len(saved["audit"])}
 
 
+
+def recovery_log_path():
+    return Path(os.getenv("SOCIAL_DIRECTORY_RECOVERY_LOG_PATH",
+                           str(review_path()) + ".recovery.json"))
+
+
+def storage_health():
+    """Inspect files without silently masking corruption."""
+    reviews = _load_json(review_path(), dict)
+    audit = _load_json(audit_path(), list)
+    backup = _load_json(backup_path(), dict)
+    valid_backup = (isinstance(backup, dict)
+                    and isinstance(backup.get("reviews"), dict)
+                    and isinstance(backup.get("audit"), list))
+    missing = all(not path.exists() for path in (review_path(), audit_path(), backup_path()))
+    if missing:
+        state = "empty"
+    elif not valid_backup:
+        state = "degraded"
+    elif reviews != backup["reviews"] or audit != backup["audit"]:
+        state = "recovery_needed"
+    else:
+        state = "healthy"
+    history = _load_json(recovery_log_path(), list)
+    return {"status": state, "backup_valid": valid_backup,
+            "reviews_valid": reviews is not None,
+            "audit_valid": audit is not None,
+            "last_recovery": history[-1] if history else None}
+
+
+def verify_and_recover():
+    """Restore mismatched primary files from the committed checkpoint."""
+    with _storage_lock():
+        before = storage_health()
+        if before["status"] != "recovery_needed":
+            return before
+        saved = _load_json(backup_path(), dict)
+        _atomic_json(review_path(), saved["reviews"])
+        _atomic_json(audit_path(), saved["audit"])
+        history = _load_json(recovery_log_path(), list) or []
+        history.append({"at": datetime.now(timezone.utc).isoformat(),
+                        "reason": "primary_files_mismatched_backup",
+                        "restored_events": len(saved["audit"])})
+        _atomic_json(recovery_log_path(), history[-100:])
+        return storage_health()
+
 def update_review(language, url, status, comment, configured_urls):
     if language not in ("DE", "FR", "IT", "RM") or status not in STATUSES:
         raise ValueError("Invalid language or status")
@@ -144,6 +190,8 @@ def update_review(language, url, status, comment, configured_urls):
         _atomic_json(backup_path(), {"reviews": data, "audit": audit})
         _atomic_json(review_path(), data)
         _atomic_json(audit_path(), audit)
+        if storage_health()["status"] != "healthy":
+            raise OSError("Directory review storage integrity check failed")
         return record
 
 
