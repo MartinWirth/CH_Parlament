@@ -89,3 +89,40 @@ def reviews_for_sources(language, sources):
     urls = {item.get("url") for item in sources if isinstance(item, dict)}
     return {url: record for url, record in records.items()
             if url in urls and isinstance(record, dict)}
+
+
+def filter_audit_events(events, language, source="", status="", from_date="", to_date=""):
+    """Filter audit events by UTC date and new status; reject invalid inputs."""
+    from datetime import date
+    if language not in ("DE", "FR", "IT", "RM"):
+        raise ValueError("Invalid language")
+    if status and status not in STATUSES:
+        raise ValueError("Invalid status")
+    if len(source) > 2048:
+        raise ValueError("Invalid source")
+    try:
+        start = date.fromisoformat(from_date) if from_date else None
+        end = date.fromisoformat(to_date) if to_date else None
+    except (TypeError, ValueError):
+        raise ValueError("Invalid date") from None
+    if start and end and start > end:
+        raise ValueError("Invalid date range")
+    filtered = []
+    for event in events:
+        if not isinstance(event, dict) or event.get("language") != language:
+            continue
+        if source and event.get("url") != source:
+            continue
+        if status and event.get("new_status") != status:
+            continue
+        try:
+            changed = datetime.fromisoformat(event["changed_at"].replace("Z", "+00:00"))
+            if changed.tzinfo is None:
+                continue
+            day = changed.astimezone(timezone.utc).date()
+        except (KeyError, AttributeError, TypeError, ValueError):
+            continue
+        if (start and day < start) or (end and day > end):
+            continue
+        filtered.append(event)
+    return filtered
