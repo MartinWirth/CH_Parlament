@@ -7,7 +7,59 @@ async function loadDirectoryHealth(){
     const sources=Array.isArray(data.sources)?data.sources:[];
     summary.textContent="Snapshot: "+(data.updated_at||"nicht vorhanden")+" · Konfiguriert: "+data.configured+
       " · Erfolgreich geparst: "+data.parsed_directories+" · Dauerhaft fehlerhaft: "+(data.persistent_failure_count??0)+" · Im Bericht: "+sources.length;
-    if(!sources.length){results.textContent="Noch keine Quelldiagnose gespeichert. Bitte zuerst einen Refresh ausführen.";return;}
+    const filters=document.createElement("section");
+    const heading=document.createElement("h3");heading.textContent="Audit-Verlauf filtern und exportieren";filters.append(heading);
+    const from=document.createElement("input");from.type="date";from.setAttribute("aria-label","Von Datum");
+    const to=document.createElement("input");to.type="date";to.setAttribute("aria-label","Bis Datum");
+    const status=document.createElement("select");status.setAttribute("aria-label","Prüfstatus");
+    for(const [value,label] of [["","Alle Status"],["in_review","In Prüfung"],["resolved","Behoben"],["deferred","Zurückgestellt"]]){
+      const option=document.createElement("option");option.value=value;option.textContent=label;status.append(option);
+    }
+    const source=document.createElement("select");source.setAttribute("aria-label","Quelle");
+    const all=document.createElement("option");all.value="";all.textContent="Alle Quellen";source.append(all);
+    for(const url of [...new Set(sources.map(item=>item.url).filter(Boolean))].sort()){
+      const option=document.createElement("option");option.value=url;option.textContent=url;source.append(option);
+    }
+    filters.append(from,to,status,source);
+    const output=document.createElement("div");output.setAttribute("aria-live","polite");
+    async function loadFilteredAudit(){
+      const params=new URLSearchParams({language:$("language").value,from_date:from.value,to_date:to.value,
+                                        status:status.value,source:source.value});
+      const data=await request("directory-review-audit?"+params);
+      output.replaceChildren();
+      const p=document.createElement("p");p.textContent="Gefundene Änderungen: "+data.count;output.append(p);
+      const list=document.createElement("ul");
+      for(const event of data.events){
+        const li=document.createElement("li");
+        li.textContent=(event.changed_at||"–")+" · "+(event.url||"–")+" · "+
+          (event.previous_status||"Neu")+" → "+(event.new_status||"–")+" · "+(event.comment||"");
+        list.append(li);
+      }
+      output.append(list);
+      return params;
+    }
+    const apply=document.createElement("button");apply.type="button";apply.textContent="Filter anwenden";
+    apply.addEventListener("click",()=>loadFilteredAudit().catch(err=>{output.textContent=err.message;}));
+    filters.append(apply);
+    for(const format of ["csv","json"]){
+      const button=document.createElement("button");button.type="button";button.textContent=format.toUpperCase()+" exportieren";
+      button.addEventListener("click",async()=>{
+        button.disabled=true;
+        try{
+          const params=new URLSearchParams({language:$("language").value,from_date:from.value,to_date:to.value,
+                                            status:status.value,source:source.value,format});
+          const response=await fetch("/admin/directory-review-audit?"+params,{credentials:"same-origin",cache:"no-store"});
+          if(!response.ok)throw Error("Export fehlgeschlagen: HTTP "+response.status);
+          const blob=await response.blob(),url=URL.createObjectURL(blob);
+          const link=document.createElement("a");link.href=url;link.download="directory-review-audit."+format;
+          document.body.append(link);link.click();link.remove();URL.revokeObjectURL(url);
+        }catch(err){output.textContent=err.message;}
+        finally{button.disabled=false;}
+      });
+      filters.append(button);
+    }
+    filters.append(output);results.append(filters);
+    if(!sources.length){results.append(document.createTextNode("Noch keine Quelldiagnose gespeichert. Bitte zuerst einen Refresh ausführen."));return;}
     const table=document.createElement("table");table.style.width="100%";
     const header=document.createElement("tr");
     for(const label of ["Quelle","Status","Fehler in Folge","Mitglieder","Hinweis"]){
