@@ -11,12 +11,41 @@ MAX_COMMENT = 1000
 MAX_AUDIT_EVENTS = 1000
 
 
+def _sqlite_enabled():
+    """Use SQLite by default; custom legacy paths keep existing installations compatible."""
+    backend = os.getenv("SOCIAL_DIRECTORY_STORAGE_BACKEND", "").lower()
+    if backend:
+        return backend == "sqlite"
+    return not os.getenv("SOCIAL_DIRECTORY_REVIEW_PATH")
+
+
+def _sqlite():
+    from . import social_directory_sqlite
+    return social_directory_sqlite
+
+
+def _sqlite_backup_path():
+    return Path(os.getenv("SOCIAL_DIRECTORY_DB_BACKUP_PATH",
+                           str(_sqlite().database_path()) + ".backup"))
+
+
+def migrate_legacy_to_sqlite():
+    """Import the existing JSON checkpoint once; never overwrite a populated database."""
+    if not _sqlite_enabled():
+        return False
+    from .social_directory_sqlite import import_legacy
+    reviews, audit = _load_state()
+    if not reviews and not audit:
+        return False
+    return import_legacy(reviews, audit)
+
+
 def review_path():
     return Path(os.getenv("SOCIAL_DIRECTORY_REVIEW_PATH", ".social_directory_review.json"))
 
 
 def read_reviews():
-    return _load_state()[0]
+    return _sqlite().read_state()[0] if _sqlite_enabled() else _load_state()[0]
 
 
 def audit_path():
@@ -24,7 +53,7 @@ def audit_path():
 
 
 def read_audit():
-    return _load_state()[1]
+    return _sqlite().read_state()[1] if _sqlite_enabled() else _load_state()[1]
 
 
 def audit_for_sources(language, sources):
@@ -98,6 +127,9 @@ def _storage_lock():
 
 
 def create_backup():
+    if _sqlite_enabled():
+        reviews, audit = _sqlite().backup_to(_sqlite_backup_path())
+        return {"reviews": len(reviews), "events": len(audit)}
     with _storage_lock():
         reviews, audit = _load_state()
         _atomic_json(backup_path(), {"reviews": reviews, "audit": audit})
@@ -105,6 +137,9 @@ def create_backup():
 
 
 def restore_backup():
+    if _sqlite_enabled():
+        reviews, audit = _sqlite().restore_from(_sqlite_backup_path())
+        return {"reviews": len(reviews), "events": len(audit)}
     with _storage_lock():
         saved = _load_json(backup_path(), dict)
         if not saved or not isinstance(saved.get("reviews"), dict) or not isinstance(saved.get("audit"), list):
@@ -122,6 +157,8 @@ def recovery_log_path():
 
 def storage_health():
     """Inspect files without silently masking corruption."""
+    if _sqlite_enabled():
+        return _sqlite().health()
     reviews = _load_json(review_path(), dict)
     audit = _load_json(audit_path(), list)
     backup = _load_json(backup_path(), dict)
@@ -146,6 +183,9 @@ def storage_health():
 
 def verify_and_recover():
     """Restore mismatched primary files from the committed checkpoint."""
+    if _sqlite_enabled():
+        migrate_legacy_to_sqlite()
+        return storage_health()
     with _storage_lock():
         before = storage_health()
         if before["status"] != "recovery_needed":
@@ -170,6 +210,8 @@ def update_review(language, url, status, comment, configured_urls):
     parsed = urlparse(url)
     if parsed.scheme != "https" or not parsed.hostname:
         raise ValueError("Invalid source URL")
+    if _sqlite_enabled():
+        return _sqlite().update(language, url, status, comment)
     with _storage_lock():
         data, audit = _load_state()
         previous = data.get(language, {}).get(url, {})
