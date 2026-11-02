@@ -14,7 +14,7 @@ from . import social_directory_sqlite as store
 
 logger = logging.getLogger(__name__)
 _rotation_lock = threading.RLock()
-_VERSION_RE = re.compile(r"^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{12}\\.sqlite3$")
+_VERSION_RE = re.compile(r"^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{12}\.sqlite3$")
 
 
 def interval_hours():
