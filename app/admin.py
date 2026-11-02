@@ -208,7 +208,7 @@ async def admin_directory_source_health(request: Request, language: str = "DE"):
     snapshot = read_profile_snapshot().get(language, {})
     report = snapshot.get("debug", {}).get("review_candidates", {}).get(
         "cantonal_directory_discovery", {})
-    from .social_directory_review import reviews_for_sources
+    from .social_directory_review import reviews_for_sources, audit_for_sources
     sources = report.get("sources", [])
     return {"language": language, "updated_at": snapshot.get("updated_at"),
             "configured": report.get("configured", 0),
@@ -216,6 +216,7 @@ async def admin_directory_source_health(request: Request, language: str = "DE"):
             "persistent_failure_count": report.get("persistent_failure_count", 0),
             "sources": sources,
             "manual_reviews": reviews_for_sources(language, sources),
+            "review_audit": audit_for_sources(language, sources),
             "review_queue": report.get("review_queue", [])}
 
 @router.post("/directory-source-review")
