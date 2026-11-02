@@ -257,6 +257,27 @@ async def admin_directory_review_audit(request: Request, language: str = "DE",
                              "Cache-Control": "no-store"})
 
 
+@router.post("/directory-review-backup")
+async def admin_directory_review_backup(request: Request):
+    _require(request)
+    if not _same_origin(request):
+        raise HTTPException(403, "Same-origin request required")
+    from .social_directory_review import create_backup
+    return {"ok": True, **create_backup()}
+
+
+@router.post("/directory-review-restore")
+async def admin_directory_review_restore(request: Request):
+    _require(request)
+    if not _same_origin(request):
+        raise HTTPException(403, "Same-origin request required")
+    from .social_directory_review import restore_backup
+    try:
+        return {"ok": True, **restore_backup()}
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+
+
 @router.post("/directory-source-review")
 async def admin_directory_source_review(request: Request):
     _require(request)

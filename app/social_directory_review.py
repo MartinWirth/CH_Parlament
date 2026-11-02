@@ -1,6 +1,7 @@
 """Persistent manual status for configured directory URLs; separate from scan results."""
 import json
 import os
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
@@ -15,11 +16,7 @@ def review_path():
 
 
 def read_reviews():
-    try:
-        data = json.loads(review_path().read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else {}
-    except (OSError, ValueError):
-        return {}
+    return _load_state()[0]
 
 
 def audit_path():
@@ -27,11 +24,7 @@ def audit_path():
 
 
 def read_audit():
-    try:
-        data = json.loads(audit_path().read_text(encoding="utf-8"))
-        return data if isinstance(data, list) else []
-    except (OSError, ValueError):
-        return []
+    return _load_state()[1]
 
 
 def audit_for_sources(language, sources):
@@ -39,6 +32,86 @@ def audit_for_sources(language, sources):
     return [event for event in read_audit()
             if isinstance(event, dict) and event.get("language") == language
             and event.get("url") in urls]
+
+
+def backup_path():
+    return Path(os.getenv("SOCIAL_DIRECTORY_BACKUP_PATH", str(review_path()) + ".backup.json"))
+
+
+def _atomic_json(path, data):
+    import tempfile
+    path.parent.mkdir(parents=True, exist_ok=True)
+    name = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
+                                         prefix="." + path.name + ".", delete=False) as handle:
+            name = handle.name
+            json.dump(data, handle, ensure_ascii=False)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(name, path)
+    finally:
+        if name and os.path.exists(name):
+            os.unlink(name)
+
+
+def _load_json(path, expected):
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+        return value if isinstance(value, expected) else None
+    except (OSError, ValueError):
+        return None
+
+
+def _load_state():
+    reviews = _load_json(review_path(), dict)
+    audit = _load_json(audit_path(), list)
+    backup = _load_json(backup_path(), dict)
+    # The backup is the commit marker for the pair of primary files.
+    if backup and isinstance(backup.get("reviews"), dict) and isinstance(backup.get("audit"), list):
+        return backup["reviews"], backup["audit"]
+    if reviews is not None and audit is not None:
+        return reviews, audit
+    return reviews if reviews is not None else {}, audit if audit is not None else []
+
+
+@contextmanager
+def _storage_lock():
+    """Exclusive cross-process lock; fail closed rather than overwrite another writer."""
+    import time
+    lock = Path(str(review_path()) + ".lock")
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + 10
+    while True:
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            break
+        except FileExistsError:
+            if time.monotonic() >= deadline:
+                raise TimeoutError("Directory review storage is locked")
+            time.sleep(0.05)
+    try:
+        os.close(fd)
+        yield
+    finally:
+        lock.unlink(missing_ok=True)
+
+
+def create_backup():
+    with _storage_lock():
+        reviews, audit = _load_state()
+        _atomic_json(backup_path(), {"reviews": reviews, "audit": audit})
+        return {"reviews": len(reviews), "events": len(audit)}
+
+
+def restore_backup():
+    with _storage_lock():
+        saved = _load_json(backup_path(), dict)
+        if not saved or not isinstance(saved.get("reviews"), dict) or not isinstance(saved.get("audit"), list):
+            raise ValueError("No valid directory review backup")
+        _atomic_json(review_path(), saved["reviews"])
+        _atomic_json(audit_path(), saved["audit"])
+        return {"reviews": len(saved["reviews"]), "events": len(saved["audit"])}
 
 
 def update_review(language, url, status, comment, configured_urls):
@@ -51,35 +124,27 @@ def update_review(language, url, status, comment, configured_urls):
     parsed = urlparse(url)
     if parsed.scheme != "https" or not parsed.hostname:
         raise ValueError("Invalid source URL")
-    record = {"status": status, "comment": comment.strip(),
-              "reviewed_at": datetime.now(timezone.utc).isoformat()}
-    path = review_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    data = read_reviews()
-    previous = data.get(language, {}).get(url, {})
-    if not isinstance(previous, dict):
-        previous = {}
-    changed = (previous.get("status") != status or
-               previous.get("comment") != record["comment"])
-    if not changed:
-        return previous
-    audit = read_audit()
-    audit.append({"language": language, "url": url,
-                  "changed_at": record["reviewed_at"],
-                  "previous_status": previous.get("status"),
-                  "new_status": status,
-                  "previous_comment": previous.get("comment"),
-                  "comment": record["comment"]})
-    audit_file = audit_path()
-    audit_file.parent.mkdir(parents=True, exist_ok=True)
-    audit_temp = audit_file.with_suffix(audit_file.suffix + ".tmp")
-    audit_temp.write_text(json.dumps(audit[-MAX_AUDIT_EVENTS:], ensure_ascii=False), encoding="utf-8")
-    audit_temp.replace(audit_file)
-    data.setdefault(language, {})[url] = record
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-    temporary.replace(path)
-    return record
+    with _storage_lock():
+        data, audit = _load_state()
+        previous = data.get(language, {}).get(url, {})
+        if not isinstance(previous, dict):
+            previous = {}
+        record = {"status": status, "comment": comment.strip(),
+                  "reviewed_at": datetime.now(timezone.utc).isoformat()}
+        if previous.get("status") == status and previous.get("comment") == record["comment"]:
+            return previous
+        audit.append({"language": language, "url": url,
+                      "changed_at": record["reviewed_at"],
+                      "previous_status": previous.get("status"),
+                      "new_status": status,
+                      "previous_comment": previous.get("comment"),
+                      "comment": record["comment"]})
+        audit = audit[-MAX_AUDIT_EVENTS:]
+        data.setdefault(language, {})[url] = record
+        _atomic_json(backup_path(), {"reviews": data, "audit": audit})
+        _atomic_json(review_path(), data)
+        _atomic_json(audit_path(), audit)
+        return record
 
 
 def reviews_for_sources(language, sources):
