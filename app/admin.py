@@ -219,6 +219,44 @@ async def admin_directory_source_health(request: Request, language: str = "DE"):
             "review_audit": audit_for_sources(language, sources),
             "review_queue": report.get("review_queue", [])}
 
+@router.get("/directory-review-audit")
+async def admin_directory_review_audit(request: Request, language: str = "DE",
+                                       source: str = "", status: str = "",
+                                       from_date: str = "", to_date: str = "",
+                                       format: str = "json"):
+    """Export filtered historical manual review events (not only current sources)."""
+    _require(request)
+    if format not in ("json", "csv"):
+        raise HTTPException(422, "Invalid export format")
+    from .social_directory_review import read_audit, filter_audit_events
+    try:
+        events = filter_audit_events(read_audit(), language, source, status,
+                                     from_date, to_date)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    if format == "json":
+        return {"language": language, "count": len(events), "events": events}
+    import csv
+    import io
+    from fastapi.responses import Response
+    fields = ("changed_at", "language", "url", "previous_status", "new_status",
+              "previous_comment", "comment")
+    stream = io.StringIO(newline="")
+    writer = csv.writer(stream)
+    writer.writerow(fields)
+    for event in events:
+        # Prevent spreadsheet formula injection in user-controlled text fields.
+        def safe(value):
+            value = "" if value is None else str(value)
+            if value.lstrip().startswith(("=", "+", "-", "@", "\t", "\r")):
+                return "'" + value
+            return value
+        writer.writerow([safe(event.get(field)) for field in fields])
+    return Response(content="\ufeff" + stream.getvalue(), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": 'attachment; filename="directory-review-audit.csv"',
+                             "Cache-Control": "no-store"})
+
+
 @router.post("/directory-source-review")
 async def admin_directory_source_review(request: Request):
     _require(request)
