@@ -111,30 +111,78 @@ def health():
             "reviews_valid": good, "audit_valid": good, "last_recovery": None}
 
 
+def migration_status():
+    """Persisted migration state; never claim success before commit."""
+    with connection() as db:
+        db.execute("CREATE TABLE IF NOT EXISTS migration (name TEXT PRIMARY KEY, completed_at TEXT NOT NULL, review_count INTEGER NOT NULL, audit_count INTEGER NOT NULL)")
+        db.commit()
+        row = db.execute("SELECT completed_at,review_count,audit_count FROM migration WHERE name='legacy_json'").fetchone()
+        return {"state": "completed", "completed_at": row[0],
+                "reviews": row[1], "events": row[2]} if row else {"state": "not_migrated"}
+
+
+def validate_legacy(reviews, audit):
+    """Fail closed on malformed legacy input rather than silently dropping records."""
+    from urllib.parse import urlparse
+    from datetime import datetime
+    if not isinstance(reviews, dict) or not isinstance(audit, list):
+        raise ValueError("Invalid legacy review or audit structure")
+    count = 0
+    for language, records in reviews.items():
+        if language not in ("DE", "FR", "IT", "RM") or not isinstance(records, dict):
+            raise ValueError("Invalid legacy language or reviews")
+        for url, record in records.items():
+            if not isinstance(url, str) or urlparse(url).scheme != "https" or not urlparse(url).hostname:
+                raise ValueError("Invalid legacy URL")
+            if not isinstance(record, dict) or record.get("status") not in ("in_review", "resolved", "deferred"):
+                raise ValueError("Invalid legacy status")
+            if not isinstance(record.get("comment"), str) or len(record["comment"]) > 1000:
+                raise ValueError("Invalid legacy comment")
+            if not isinstance(record.get("reviewed_at"), str):
+                raise ValueError("Invalid legacy review timestamp")
+            count += 1
+    for event in audit:
+        if not isinstance(event, dict) or event.get("language") not in ("DE", "FR", "IT", "RM"):
+            raise ValueError("Invalid legacy audit language")
+        if not isinstance(event.get("url"), str) or urlparse(event["url"]).scheme != "https" or not urlparse(event["url"]).hostname:
+            raise ValueError("Invalid legacy audit URL")
+        if event.get("new_status") not in ("in_review", "resolved", "deferred"):
+            raise ValueError("Invalid legacy audit status")
+        if event.get("previous_status") not in (None, "in_review", "resolved", "deferred"):
+            raise ValueError("Invalid legacy previous status")
+        if any(not isinstance(event.get(k), str) for k in ("changed_at", "comment")):
+            raise ValueError("Invalid legacy audit timestamp or comment")
+        if any(event.get(k) is not None and not isinstance(event[k], str) for k in ("previous_comment",)):
+            raise ValueError("Invalid legacy previous comment")
+    return count
+
+
 def import_legacy(reviews, audit):
-    """Import legacy data only into a fresh, empty database."""
+    """One atomic import, including a durable completion marker."""
+    count = validate_legacy(reviews, audit)
     with connection() as db:
         db.execute("BEGIN IMMEDIATE")
-        if db.execute("SELECT COUNT(*) FROM reviews").fetchone()[0] or db.execute(
-                "SELECT COUNT(*) FROM audit").fetchone()[0]:
+        db.execute("CREATE TABLE IF NOT EXISTS migration (name TEXT PRIMARY KEY, completed_at TEXT NOT NULL, review_count INTEGER NOT NULL, audit_count INTEGER NOT NULL)")
+        if db.execute("SELECT 1 FROM migration WHERE name='legacy_json'").fetchone():
             db.rollback()
             return False
-        for language, records in reviews.items():
-            if not isinstance(records, dict):
-                continue
-            for url, record in records.items():
-                if not isinstance(record, dict):
-                    continue
-                db.execute("INSERT INTO reviews VALUES(?,?,?,?,?)",
-                           (language, url, record.get("status", ""),
-                            record.get("comment", ""), record.get("reviewed_at", "")))
-        for event in audit[-MAX_AUDIT_EVENTS:]:
-            if not isinstance(event, dict):
-                continue
-            db.execute("INSERT INTO audit(language,url,changed_at,previous_status,new_status,previous_comment,comment) "
-                       "VALUES(?,?,?,?,?,?,?)",
-                       tuple(event.get(k) for k in ("language", "url", "changed_at",
-                                                    "previous_status", "new_status",
-                                                    "previous_comment", "comment")))
-        db.commit()
+        if db.execute("SELECT 1 FROM reviews LIMIT 1").fetchone() or db.execute(
+                "SELECT 1 FROM audit LIMIT 1").fetchone():
+            db.rollback()
+            return False
+        try:
+            for language, records in reviews.items():
+                for url, record in records.items():
+                    db.execute("INSERT INTO reviews VALUES(?,?,?,?,?)",
+                               (language, url, record["status"], record["comment"], record["reviewed_at"]))
+            for event in audit[-MAX_AUDIT_EVENTS:]:
+                db.execute("INSERT INTO audit(language,url,changed_at,previous_status,new_status,previous_comment,comment) VALUES(?,?,?,?,?,?,?)",
+                           tuple(event.get(k) for k in ("language", "url", "changed_at", "previous_status",
+                                                        "new_status", "previous_comment", "comment")))
+            db.execute("INSERT INTO migration VALUES('legacy_json',?,?,?)",
+                       (datetime.now(timezone.utc).isoformat(), count, len(audit[-MAX_AUDIT_EVENTS:])))
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
         return True

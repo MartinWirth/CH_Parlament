@@ -29,14 +29,63 @@ def _sqlite_backup_path():
                            str(_sqlite().database_path()) + ".backup"))
 
 
+def migration_status():
+    if not _sqlite_enabled():
+        return {"state": "legacy_json"}
+    from .social_directory_sqlite import migration_status as sqlite_status
+    return sqlite_status()
+
+
 def migrate_legacy_to_sqlite():
-    """Import the existing JSON checkpoint once; never overwrite a populated database."""
+    """Validate and preserve JSON inputs before an atomic one-time import."""
     if not _sqlite_enabled():
         return False
-    from .social_directory_sqlite import import_legacy
-    reviews, audit = _load_state()
-    if not reviews and not audit:
+    from .social_directory_sqlite import import_legacy, validate_legacy
+    if migration_status()["state"] == "completed":
         return False
+    # A populated SQLite store must not be overwritten by old JSON.
+    existing_reviews, existing_audit = _sqlite().read_state()
+    if existing_reviews or existing_audit:
+        return False
+    paths = (review_path(), audit_path(), backup_path())
+    if not any(path.exists() for path in paths):
+        return False
+    # A valid checkpoint is authoritative; never import partially corrupt files.
+    checkpoint = _load_json(backup_path(), dict)
+    if backup_path().exists() and (not isinstance(checkpoint, dict)
+            or not isinstance(checkpoint.get("reviews"), dict)
+            or not isinstance(checkpoint.get("audit"), list)):
+        raise ValueError("Invalid legacy checkpoint; migration blocked")
+    if checkpoint is None and (not review_path().exists() or not audit_path().exists()):
+        raise ValueError("Incomplete legacy files; migration blocked")
+    reviews, audit = _load_state()
+    validate_legacy(reviews, audit)
+    # Preserve every existing source file byte-for-byte before touching SQLite.
+    import shutil
+    import tempfile
+    directory = Path(os.getenv("SOCIAL_DIRECTORY_MIGRATION_BACKUP_DIR",
+                               str(_sqlite().database_path()) + ".legacy-backup"))
+    directory.mkdir(parents=True, exist_ok=True)
+    for index, source in enumerate(paths):
+        if not source.exists():
+            continue
+        destination = directory / ("reviews.json", "audit.json", "checkpoint.json")[index]
+        if destination.exists():
+            if destination.read_bytes() != source.read_bytes():
+                raise ValueError("Legacy migration backup differs; manual review required")
+            continue
+        temp = None
+        try:
+            with tempfile.NamedTemporaryFile(dir=directory, delete=False) as handle:
+                temp = Path(handle.name)
+                with source.open("rb") as origin:
+                    shutil.copyfileobj(origin, handle)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp, destination)
+        finally:
+            if temp is not None:
+                temp.unlink(missing_ok=True)
     return import_legacy(reviews, audit)
 
 
@@ -158,7 +207,9 @@ def recovery_log_path():
 def storage_health():
     """Inspect files without silently masking corruption."""
     if _sqlite_enabled():
-        return _sqlite().health()
+        result = _sqlite().health()
+        result["migration"] = migration_status()
+        return result
     reviews = _load_json(review_path(), dict)
     audit = _load_json(audit_path(), list)
     backup = _load_json(backup_path(), dict)
