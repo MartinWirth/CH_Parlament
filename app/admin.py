@@ -208,12 +208,35 @@ async def admin_directory_source_health(request: Request, language: str = "DE"):
     snapshot = read_profile_snapshot().get(language, {})
     report = snapshot.get("debug", {}).get("review_candidates", {}).get(
         "cantonal_directory_discovery", {})
+    from .social_directory_review import reviews_for_sources
+    sources = report.get("sources", [])
     return {"language": language, "updated_at": snapshot.get("updated_at"),
             "configured": report.get("configured", 0),
             "parsed_directories": report.get("parsed_directories", 0),
             "persistent_failure_count": report.get("persistent_failure_count", 0),
-            "sources": report.get("sources", []),
+            "sources": sources,
+            "manual_reviews": reviews_for_sources(language, sources),
             "review_queue": report.get("review_queue", [])}
+
+@router.post("/directory-source-review")
+async def admin_directory_source_review(request: Request):
+    _require(request)
+    if not _same_origin(request):
+        raise HTTPException(403, "Same-origin request required")
+    data = await request.json()
+    if not isinstance(data, dict) or set(data) != {"language", "url", "status", "comment"}:
+        raise HTTPException(422, "Invalid review request")
+    if not all(isinstance(data[key], str) for key in data):
+        raise HTTPException(422, "Invalid review values")
+    from .social_cantonal_directories import configured_cantonal_directories
+    from .social_directory_review import update_review
+    try:
+        record = update_review(data["language"], data["url"], data["status"],
+                               data["comment"], configured_cantonal_directories())
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    return {"ok": True, **record}
+
 
 @router.get("/targeted-research")
 async def admin_targeted_research(request: Request, language: str = "DE", limit: int = 100):
