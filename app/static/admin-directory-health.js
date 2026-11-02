@@ -27,7 +27,7 @@ async function loadDirectoryHealth(){
         (m.last_error?" · Fehler: "+m.last_error:"");
       results.append(maintenanceLine);
     }
-    if(health.maintenance){
+    if(health.maintenance&&health.migration?.state!=="legacy_json"){
       const versions=await request("directory-backup-versions");
       const section=document.createElement("section");
       const title=document.createElement("h3");title.textContent="SQLite-Backup-Versionen";
