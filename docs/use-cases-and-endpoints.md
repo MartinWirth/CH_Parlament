@@ -62,6 +62,7 @@ Alle folgenden Pfade liegen unter `/admin`. `GET /admin` liefert die Login-/Admi
 | GET | `/admin/targeted-research` | `language=DE`, `limit=100` (1–500) | Geschützte Nachrecherche-Aufträge für Mitglieder ohne bestätigte Profile; nur gespeicherte Daten |
 | GET | `/admin/directory-source-health` | `language=DE` | Gespeicherte Erreichbarkeit und Nutzbarkeit der Parteiverzeichnis-Quellen |
 | POST | `/admin/directory-source-review` | JSON: `language`, `url`, `status`, `comment` | Authentifizierte manuelle Quellenprüfung (Same-Origin-Schutz) |
+| GET | `/admin/directory-review-audit` | `language`, `source`, `status`, `from_date`, `to_date`, `format=json\|csv` | Authentifizierter gefilterter Audit-Verlauf und CSV/JSON-Export |
 | GET | `/admin/discovery-report` | `language=DE`, `limit=100` (1–500) | Geschützter Bericht über Kandidaten, Fundstellen, Abdeckung und Identitätskonflikte aus dem gespeicherten Snapshot |
 | POST | `/admin/review` | JSON mit exakt `language`, `person_number`, `url`, `decision` | Review-Entscheidung für vorhandenen Kandidaten speichern |
 | GET | `/admin/targeted-ui.js` | – | Öffentliches JavaScript der Nachrecherche-Anzeige; API-Daten erfordern Admin-Anmeldung |
@@ -184,3 +185,7 @@ Administratoren können in der priorisierten Quellenprüfliste eine konfiguriert
 ### Änderungsverlauf manueller Quellenprüfungen (PR #80)
 
 Jede tatsächliche Änderung des Prüfstatus oder Kommentars erzeugt ein Audit-Ereignis mit Sprache, Quellen-URL, UTC-Zeitstempel, vorherigem und neuem Status sowie vorherigem und neuem Kommentar. Identische wiederholte Speichervorgänge erzeugen keinen zusätzlichen Eintrag. Die Ereignisse werden unabhängig vom Snapshot unter `SOCIAL_DIRECTORY_AUDIT_PATH` (Standard: `SOCIAL_DIRECTORY_REVIEW_PATH` plus `.audit.json`) gespeichert; die letzten 1000 Ereignisse bleiben erhalten. Die bestehende authentifizierte API `GET /admin/directory-source-health` liefert `review_audit` für im Snapshot sichtbare Quellen. Das Admin-Dashboard zeigt den Verlauf pro Quelle. Dies ist eine begrenzte Änderungshistorie und kein manipulationssicheres, unbegrenzt aufbewahrtes Compliance-Audit; mangels individueller Admin-Accounts wird kein Benutzername protokolliert.
+
+### Audit-Filter und Export (PR #81)
+
+Der authentifizierte Endpunkt `GET /admin/directory-review-audit` filtert die gespeicherten Audit-Ereignisse nach Sprache (`language`), exakter Quellen-URL (`source`), neuem Prüfstatus (`status` = `in_review`, `resolved`, `deferred`) und inklusivem UTC-Datumsbereich (`from_date`, `to_date` im Format `YYYY-MM-DD`). Standard `format=json` liefert Anzahl und Ereignisse; `format=csv` exportiert eine UTF-8-CSV mit BOM und Spalten für Zeitpunkt, Sprache, Quelle, vorherigen/neuen Status und Kommentare. Potenzielle Tabellenformeln werden im CSV-Export entschärft. Das Admin-Dashboard bietet Filter, eine Trefferliste und CSV-/JSON-Downloads. Die Ausgabe umfasst auch frühere Quellen, sofern Ereignisse im begrenzten Audit-Log vorhanden sind; maximal 1000 Audit-Ereignisse werden gespeichert.
