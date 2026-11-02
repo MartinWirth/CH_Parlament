@@ -35,6 +35,14 @@ _scheduler_task = None
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     global _scheduler_task
+    from .social_directory_review import verify_and_recover
+    try:
+        storage_state = verify_and_recover()
+        logger.info("Directory review storage integrity: %s", storage_state["status"])
+        if storage_state["status"] == "degraded":
+            logger.error("Directory review storage degraded; manual inspection required")
+    except (OSError, TimeoutError, ValueError) as exc:
+        logger.error("Directory review storage verification failed: %s", exc)
     from .social_check_scheduler import interval_hours, loop
     if interval_hours():
         _scheduler_task = asyncio.create_task(loop())
