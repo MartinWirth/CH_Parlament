@@ -5,6 +5,12 @@ async function loadDirectoryHealth(){
   try{
     const data=await request("directory-source-health?language="+encodeURIComponent($("language").value));
     const sources=Array.isArray(data.sources)?data.sources:[];
+    const health=await request("directory-storage-health");
+    const healthLine=document.createElement("p");
+    healthLine.textContent="Speicherzustand: "+health.status+
+      " · Backup: "+(health.backup_valid?"gültig":"nicht gültig")+
+      " · Letzte Wiederherstellung: "+(health.last_recovery?.at||"keine");
+    results.append(healthLine);
     summary.textContent="Snapshot: "+(data.updated_at||"nicht vorhanden")+" · Konfiguriert: "+data.configured+
       " · Erfolgreich geparst: "+data.parsed_directories+" · Dauerhaft fehlerhaft: "+(data.persistent_failure_count??0)+" · Im Bericht: "+sources.length;
     const filters=document.createElement("section");
