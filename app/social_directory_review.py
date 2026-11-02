@@ -67,10 +67,11 @@ def _load_state():
     reviews = _load_json(review_path(), dict)
     audit = _load_json(audit_path(), list)
     backup = _load_json(backup_path(), dict)
-    if reviews is not None and audit is not None:
-        return reviews, audit
+    # The backup is the commit marker for the pair of primary files.
     if backup and isinstance(backup.get("reviews"), dict) and isinstance(backup.get("audit"), list):
         return backup["reviews"], backup["audit"]
+    if reviews is not None and audit is not None:
+        return reviews, audit
     return reviews if reviews is not None else {}, audit if audit is not None else []
 
 
