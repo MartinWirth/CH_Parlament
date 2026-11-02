@@ -31,6 +31,7 @@ async function loadDirectoryHealth(){
     }
     results.append(table);
     const queue=Array.isArray(data.review_queue)?data.review_queue:[];
+    const manual=data.manual_reviews||{};
     const heading=document.createElement("h3");heading.textContent="Priorisierte Prüfliste ("+queue.length+")";
     results.append(heading);
     if(!queue.length){const p=document.createElement("p");p.textContent="Keine Quellen zur Prüfung vorgemerkt.";results.append(p);}
@@ -48,7 +49,30 @@ async function loadDirectoryHealth(){
         li.textContent=(event.checked_at||"–")+" · "+(event.status||"–")+" · "+(event.reason||"–");
         history.append(li);
       }
-      section.append(history);results.append(section);
+      section.append(history);
+      const existing=manual[item.url]||{};
+      const state=document.createElement("select");
+      for(const [value,label] of [["in_review","In Prüfung"],["resolved","Behoben"],["deferred","Zurückgestellt"]]){
+        const option=document.createElement("option");option.value=value;option.textContent=label;state.append(option);
+      }
+      state.value=existing.status||"in_review";
+      const comment=document.createElement("textarea");comment.maxLength=1000;
+      comment.placeholder="Kommentar (max. 1000 Zeichen)";comment.value=existing.comment||"";
+      const saved=document.createElement("p");
+      saved.textContent=existing.reviewed_at?"Letzte Bearbeitung: "+existing.reviewed_at:"Noch nicht bearbeitet";
+      const save=document.createElement("button");save.type="button";save.textContent="Prüfstatus speichern";
+      save.addEventListener("click",async()=>{
+        save.disabled=true;
+        try{
+          const result=await request("directory-source-review",{
+            method:"POST",headers:{"Content-Type":"application/json","X-Admin-Action":"1"},
+            body:JSON.stringify({language:$("language").value,url:item.url,status:state.value,comment:comment.value})
+          });
+          saved.textContent="Gespeichert: "+result.reviewed_at;
+        }catch(err){saved.textContent="Speichern fehlgeschlagen: "+err.message;}
+        finally{save.disabled=false;}
+      });
+      section.append(state,comment,save,saved);results.append(section);
     }
   }catch(err){summary.textContent="Quellenstatus konnte nicht geladen werden.";results.replaceChildren();$("message").textContent=err.message;}
 }
