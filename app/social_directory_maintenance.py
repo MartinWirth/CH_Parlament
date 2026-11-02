@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 def interval_hours():
-    raw = os.getenv("SOCIAL_DIRECTORY_MAINTENANCE_INTERVAL_HOURS", "24")
+    raw = os.getenv("SOCIAL_DIRECTORY_MAINTENANCE_INTERVAL_HOURS", "0")
     try:
         value = float(raw)
     except ValueError:
