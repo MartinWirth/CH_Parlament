@@ -209,6 +209,9 @@ def storage_health():
     if _sqlite_enabled():
         result = _sqlite().health()
         result["migration"] = migration_status()
+        from .social_directory_maintenance import status as maintenance_status
+        result["maintenance"] = maintenance_status()
+        result["backup_valid"] = result["maintenance"]["backup_valid"]
         return result
     reviews = _load_json(review_path(), dict)
     audit = _load_json(audit_path(), list)

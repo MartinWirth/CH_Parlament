@@ -17,6 +17,16 @@ async function loadDirectoryHealth(){
       (migration?.completed_at?" · Abgeschlossen: "+migration.completed_at:"")+
       (migration?.reviews!==undefined?" · Prüfungen: "+migration.reviews+" · Audit: "+migration.events:"");
     results.append(migrationLine);
+    if(health.maintenance){
+      const maintenanceLine=document.createElement("p");
+      const m=health.maintenance;
+      maintenanceLine.textContent="SQLite-Wartung: "+(m.enabled?"aktiv (alle "+m.interval_hours+" h)":"deaktiviert")+
+        " · Letzte Prüfung: "+(m.last_check_at||"keine")+
+        " · Prüfergebnis: "+(m.last_check_status||"ausstehend")+
+        " · Letztes erfolgreiches Backup: "+(m.last_backup_at||"keines")+
+        (m.last_error?" · Fehler: "+m.last_error:"");
+      results.append(maintenanceLine);
+    }
     summary.textContent="Snapshot: "+(data.updated_at||"nicht vorhanden")+" · Konfiguriert: "+data.configured+
       " · Erfolgreich geparst: "+data.parsed_directories+" · Dauerhaft fehlerhaft: "+(data.persistent_failure_count??0)+" · Im Bericht: "+sources.length;
     const filters=document.createElement("section");
