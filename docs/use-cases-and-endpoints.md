@@ -61,6 +61,7 @@ Alle folgenden Pfade liegen unter `/admin`. `GET /admin` liefert die Login-/Admi
 | GET | `/admin/review` | `language=DE` | Ungeprüfte/zu prüfende Social-Profile aus Snapshot |
 | GET | `/admin/targeted-research` | `language=DE`, `limit=100` (1–500) | Geschützte Nachrecherche-Aufträge für Mitglieder ohne bestätigte Profile; nur gespeicherte Daten |
 | GET | `/admin/directory-source-health` | `language=DE` | Gespeicherte Erreichbarkeit und Nutzbarkeit der Parteiverzeichnis-Quellen |
+| POST | `/admin/directory-source-review` | JSON: `language`, `url`, `status`, `comment` | Authentifizierte manuelle Quellenprüfung (Same-Origin-Schutz) |
 | GET | `/admin/discovery-report` | `language=DE`, `limit=100` (1–500) | Geschützter Bericht über Kandidaten, Fundstellen, Abdeckung und Identitätskonflikte aus dem gespeicherten Snapshot |
 | POST | `/admin/review` | JSON mit exakt `language`, `person_number`, `url`, `decision` | Review-Entscheidung für vorhandenen Kandidaten speichern |
 | GET | `/admin/targeted-ui.js` | – | Öffentliches JavaScript der Nachrecherche-Anzeige; API-Daten erfordern Admin-Anmeldung |
@@ -175,3 +176,7 @@ Jeder erfolgreiche Social-Media-Refresh vergleicht den Quellenstatus mit dem vor
 ### Priorisierte Prüfliste für Parteiverzeichnisse (PR #78)
 
 Die bestehende geschützte API `GET /admin/directory-source-health` liefert zusätzlich `review_queue` aus dem zuletzt gespeicherten Snapshot. Prioritäten: `high` nach mindestens drei aufeinanderfolgenden Scanfehlern, `medium` bei einzelnen Scanfehlern, `low` bei erfolgreich geparsten Verzeichnissen ohne neue Mitgliedertreffer. Die Prüfliste ist nach Priorität, Fehleranzahl und URL sortiert. Pro Quelle werden bis zu zehn Fehlerereignisse mit Zeitstempel, Status und Grund sowie der letzte erfolgreiche Scan gespeichert. Die Admin-Oberfläche zeigt diese Angaben und manuelle Handlungsempfehlungen. Die Historie beginnt erst nach Aktivierung dieser Funktion, reicht nur so weit zurück wie der gespeicherte Snapshot und ersetzt kein dauerhaftes Audit-Log. Es erfolgt keine automatische Deaktivierung oder Freigabe.
+
+### Manueller Prüfworkflow für Parteiverzeichnisse (PR #79)
+
+Administratoren können in der priorisierten Quellenprüfliste eine konfigurierte URL als `in_review` (In Prüfung), `resolved` (Behoben) oder `deferred` (Zurückgestellt) markieren und einen Kommentar (maximal 1000 Zeichen) speichern. Der geschützte Endpunkt `POST /admin/directory-source-review` verlangt Session-Cookie, gültigen Origin und `X-Admin-Action: 1`. Die Daten werden pro Sprache und URL in `SOCIAL_DIRECTORY_REVIEW_PATH` (Standard `.social_directory_review.json`) atomar gespeichert, unabhängig vom Scan-Snapshot. `GET /admin/directory-source-health` liefert `manual_reviews` für die im Snapshot vorhandenen Quellen. Der Status beeinflusst weder Scans noch automatische Freigaben und kann beim nächsten Refresh weiter bearbeitet werden.
