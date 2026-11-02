@@ -58,6 +58,28 @@ async function loadDirectoryHealth(){
       });
       filters.append(button);
     }
+    const backupButton=document.createElement("button");backupButton.type="button";
+    backupButton.textContent="Sicherung erstellen";
+    const restoreButton=document.createElement("button");restoreButton.type="button";
+    restoreButton.textContent="Letzte Sicherung wiederherstellen";
+    async function storageAction(endpoint){
+      const result=await request(endpoint,{method:"POST",headers:{"X-Admin-Action":"1"}});
+      output.textContent="Erfolgreich: "+result.events+" Audit-Ereignisse gesichert/wiederhergestellt.";
+    }
+    backupButton.addEventListener("click",async()=>{
+      backupButton.disabled=true;
+      try{await storageAction("directory-review-backup");}
+      catch(err){output.textContent=err.message;}
+      finally{backupButton.disabled=false;}
+    });
+    restoreButton.addEventListener("click",async()=>{
+      if(!window.confirm("Letzte Sicherung wiederherstellen? Nicht gesicherte Änderungen können verloren gehen."))return;
+      restoreButton.disabled=true;
+      try{await storageAction("directory-review-restore");await loadDirectoryHealth();}
+      catch(err){output.textContent=err.message;}
+      finally{restoreButton.disabled=false;}
+    });
+    filters.append(backupButton,restoreButton);
     filters.append(output);results.append(filters);
     if(!sources.length){results.append(document.createTextNode("Noch keine Quelldiagnose gespeichert. Bitte zuerst einen Refresh ausführen."));return;}
     const table=document.createElement("table");table.style.width="100%";
