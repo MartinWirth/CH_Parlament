@@ -27,6 +27,37 @@ async function loadDirectoryHealth(){
         (m.last_error?" · Fehler: "+m.last_error:"");
       results.append(maintenanceLine);
     }
+    if(health.maintenance){
+      const versions=await request("directory-backup-versions");
+      const section=document.createElement("section");
+      const title=document.createElement("h3");title.textContent="SQLite-Backup-Versionen";
+      const select=document.createElement("select");
+      const choices=Array.isArray(versions.versions)?versions.versions:[];
+      for(const entry of choices){
+        const option=document.createElement("option");
+        option.value=entry.id;
+        option.textContent=entry.id+(entry.valid?"":" (ungültig)");
+        option.disabled=!entry.valid;
+        select.append(option);
+      }
+      const restore=document.createElement("button");
+      restore.type="button";restore.textContent="Ausgewählte Version wiederherstellen";
+      restore.disabled=!choices.some(entry=>entry.valid);
+      const feedback=document.createElement("p");
+      restore.addEventListener("click",async()=>{
+        if(!select.value||!confirm("Datenbank auf Version "+select.value+" zurücksetzen? Aktuelle Daten werden ersetzt."))return;
+        restore.disabled=true;
+        try{
+          const response=await request("directory-backup-version-restore",{
+            method:"POST",headers:{"Content-Type":"application/json","X-Admin-Action":"1"},
+            body:JSON.stringify({version:select.value})
+          });
+          feedback.textContent="Wiederhergestellt: "+response.reviews+" Prüfungen, "+response.events+" Ereignisse.";
+        }catch(err){feedback.textContent="Wiederherstellung fehlgeschlagen: "+err.message;}
+        finally{restore.disabled=false;}
+      });
+      section.append(title,select,restore,feedback);results.append(section);
+    }
     summary.textContent="Snapshot: "+(data.updated_at||"nicht vorhanden")+" · Konfiguriert: "+data.configured+
       " · Erfolgreich geparst: "+data.parsed_directories+" · Dauerhaft fehlerhaft: "+(data.persistent_failure_count??0)+" · Im Bericht: "+sources.length;
     const filters=document.createElement("section");
