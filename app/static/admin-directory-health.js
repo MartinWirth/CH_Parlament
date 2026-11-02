@@ -11,6 +11,12 @@ async function loadDirectoryHealth(){
       " · Backup: "+(health.backup_valid?"gültig":"nicht gültig")+
       " · Letzte Wiederherstellung: "+(health.last_recovery?.at||"keine");
     results.append(healthLine);
+    const migrationLine=document.createElement("p");
+    const migration=health.migration;
+    migrationLine.textContent="SQLite-Migration: "+(migration?.state||"nicht verfügbar")+
+      (migration?.completed_at?" · Abgeschlossen: "+migration.completed_at:"")+
+      (migration?.reviews!==undefined?" · Prüfungen: "+migration.reviews+" · Audit: "+migration.events:"");
+    results.append(migrationLine);
     summary.textContent="Snapshot: "+(data.updated_at||"nicht vorhanden")+" · Konfiguriert: "+data.configured+
       " · Erfolgreich geparst: "+data.parsed_directories+" · Dauerhaft fehlerhaft: "+(data.persistent_failure_count??0)+" · Im Bericht: "+sources.length;
     const filters=document.createElement("section");
