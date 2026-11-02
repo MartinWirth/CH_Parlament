@@ -198,6 +198,13 @@ async def admin_discovery_report(request: Request, language: str = "DE", limit: 
 
 
 
+@router.get("/directory-storage-health")
+async def admin_directory_storage_health(request: Request):
+    _require(request)
+    from .social_directory_review import storage_health
+    return storage_health()
+
+
 @router.get("/directory-source-health")
 async def admin_directory_source_health(request: Request, language: str = "DE"):
     """Read-only per-source diagnostics from the most recent saved refresh."""
