@@ -32,6 +32,7 @@ async function loadDirectoryHealth(){
     results.append(table);
     const queue=Array.isArray(data.review_queue)?data.review_queue:[];
     const manual=data.manual_reviews||{};
+    const audit=Array.isArray(data.review_audit)?data.review_audit:[];
     const heading=document.createElement("h3");heading.textContent="Priorisierte Prüfliste ("+queue.length+")";
     results.append(heading);
     if(!queue.length){const p=document.createElement("p");p.textContent="Keine Quellen zur Prüfung vorgemerkt.";results.append(p);}
@@ -72,7 +73,20 @@ async function loadDirectoryHealth(){
         }catch(err){saved.textContent="Speichern fehlgeschlagen: "+err.message;}
         finally{save.disabled=false;}
       });
-      section.append(state,comment,save,saved);results.append(section);
+      const events=audit.filter(event=>event.url===item.url);
+      const auditDetails=document.createElement("details");
+      const auditTitle=document.createElement("summary");
+      auditTitle.textContent="Änderungsverlauf ("+events.length+")";
+      auditDetails.append(auditTitle);
+      const auditList=document.createElement("ul");
+      for(const event of events.slice().reverse()){
+        const li=document.createElement("li");
+        li.textContent=(event.changed_at||"–")+" · "+(event.previous_status||"Neu")+
+          " → "+(event.new_status||"–")+" · Kommentar: "+(event.comment||"–");
+        auditList.append(li);
+      }
+      auditDetails.append(auditList);
+      section.append(state,comment,save,saved,auditDetails);results.append(section);
     }
   }catch(err){summary.textContent="Quellenstatus konnte nicht geladen werden.";results.replaceChildren();$("message").textContent=err.message;}
 }
