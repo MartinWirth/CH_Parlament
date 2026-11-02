@@ -212,7 +212,8 @@ async def admin_directory_source_health(request: Request, language: str = "DE"):
             "configured": report.get("configured", 0),
             "parsed_directories": report.get("parsed_directories", 0),
             "persistent_failure_count": report.get("persistent_failure_count", 0),
-            "sources": report.get("sources", [])}
+            "sources": report.get("sources", []),
+            "review_queue": report.get("review_queue", [])}
 
 @router.get("/targeted-research")
 async def admin_targeted_research(request: Request, language: str = "DE", limit: int = 100):
