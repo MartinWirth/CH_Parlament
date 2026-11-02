@@ -30,11 +30,12 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 logger = logging.getLogger("ch_parlament")
 # Scheduler is owned by the ASGI application lifecycle.
 _scheduler_task = None
+_directory_maintenance_task = None
 
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
-    global _scheduler_task
+    global _scheduler_task, _directory_maintenance_task
     from .social_directory_review import verify_and_recover
     try:
         storage_state = verify_and_recover()
@@ -46,9 +47,24 @@ async def lifespan(application: FastAPI):
     from .social_check_scheduler import interval_hours, loop
     if interval_hours():
         _scheduler_task = asyncio.create_task(loop())
+    from .social_directory_review import _sqlite_enabled
+    if _sqlite_enabled():
+        from .social_directory_maintenance import interval_hours as maintenance_hours, periodic_loop
+        try:
+            if maintenance_hours():
+                _directory_maintenance_task = asyncio.create_task(periodic_loop())
+        except ValueError as exc:
+            logger.error("Invalid directory maintenance configuration: %s", exc)
     try:
         yield
     finally:
+        if _directory_maintenance_task is not None:
+            _directory_maintenance_task.cancel()
+            try:
+                await _directory_maintenance_task
+            except asyncio.CancelledError:
+                pass
+            _directory_maintenance_task = None
         if _scheduler_task is not None:
             _scheduler_task.cancel()
             try:
