@@ -2,6 +2,7 @@
 import json
 import os
 import sqlite3
+import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,7 +21,16 @@ def connection():
     db = sqlite3.connect(str(path), timeout=10)
     try:
         db.execute("PRAGMA busy_timeout=10000")
-        db.execute("PRAGMA journal_mode=WAL")
+        # Concurrent first-time connections can race while switching journal mode.
+        # Retry only transient SQLite lock contention, keeping WAL durability.
+        for attempt in range(5):
+            try:
+                db.execute("PRAGMA journal_mode=WAL")
+                break
+            except sqlite3.OperationalError as exc:
+                if "locked" not in str(exc).lower() or attempt == 4:
+                    raise
+                time.sleep(0.05 * (attempt + 1))
         db.execute("PRAGMA synchronous=FULL")
         db.execute("""CREATE TABLE IF NOT EXISTS reviews (
             language TEXT NOT NULL, url TEXT NOT NULL, status TEXT NOT NULL,
