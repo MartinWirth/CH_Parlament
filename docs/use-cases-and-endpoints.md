@@ -66,7 +66,8 @@ Alle folgenden Pfade liegen unter `/admin`. `GET /admin` liefert die Login-/Admi
 | GET | `/admin/directory-storage-health` | – | Geschützter Speicher- und Wiederherstellungsstatus |
 | POST | `/admin/directory-review-backup` | – | Geschützte manuelle Sicherung von Prüfstatus und Audit |
 | POST | `/admin/directory-review-restore` | – | Geschützte Wiederherstellung aus letzter gültiger Sicherung |
-| GET | `/admin/directory-backup-versions` | – | Geschützte Liste der SQLite-Backup-Versionen mit UTC-Erstellungszeit, Dateigrösse und Integrität |\n| POST | `/admin/directory-backup-verify` | – | Authentifizierte manuelle Integritätsprüfung aller Backup-Versionen (Same-Origin und Admin-Action erforderlich) |
+| GET | `/admin/directory-backup-versions` | – | Geschützte Liste der SQLite-Backup-Versionen mit UTC-Erstellungszeit, Dateigrösse und Integrität |
+| POST | `/admin/directory-backup-verify` | – | Authentifizierte manuelle Integritätsprüfung aller Backup-Versionen (Same-Origin und Admin-Action erforderlich) |
 | POST | `/admin/directory-backup-version-restore` | JSON `{version}` | Geschützte Wiederherstellung einer ausgewählten SQLite-Version |
 | GET | `/admin/discovery-report` | `language=DE`, `limit=100` (1–500) | Geschützter Bericht über Kandidaten, Fundstellen, Abdeckung und Identitätskonflikte aus dem gespeicherten Snapshot |
 | POST | `/admin/review` | JSON mit exakt `language`, `person_number`, `url`, `decision` | Review-Entscheidung für vorhandenen Kandidaten speichern |
