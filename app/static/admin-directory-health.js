@@ -31,14 +31,33 @@ async function loadDirectoryHealth(){
       const versions=await request("directory-backup-versions");
       const section=document.createElement("section");
       const title=document.createElement("h3");title.textContent="SQLite-Backup-Versionen";
-      const select=document.createElement("select");
       const choices=Array.isArray(versions.versions)?versions.versions:[];
-      for(const entry of choices){
-        const option=document.createElement("option");
-        option.value=entry.id;
-        option.textContent=entry.id+(entry.valid?"":" (ungültig)");
-        option.disabled=!entry.valid;
-        select.append(option);
+      const history=document.createElement("table");history.style.width="100%";
+      const head=document.createElement("tr");
+      for(const name of ["Auswahl","Erstellt (UTC)","Grösse","Integrität"]){
+        const th=document.createElement("th");th.scope="col";th.textContent=name;head.append(th);
+      }
+      history.append(head);
+      const select=document.createElement("select");select.setAttribute("aria-label","Backup-Version auswählen");
+      function showHistory(entries){
+        history.replaceChildren(head);select.replaceChildren();
+        for(const entry of entries){
+          const option=document.createElement("option");option.value=entry.id;
+          option.textContent=entry.id;option.disabled=!entry.valid;select.append(option);
+          const tr=document.createElement("tr");
+          const radio=document.createElement("input");radio.type="radio";radio.name="directory-backup-version";
+          radio.value=entry.id;radio.disabled=!entry.valid;
+          radio.addEventListener("change",()=>{select.value=entry.id;restore.disabled=!entry.valid;});
+          const tdSelect=document.createElement("td");tdSelect.append(radio);tr.append(tdSelect);
+          for(const value of [entry.created_at||"–",
+                              Number.isFinite(entry.size_bytes)?(entry.size_bytes/1024).toFixed(1)+" KiB":"–",
+                              entry.valid?"Gültig":"Ungültig"]){
+            const td=document.createElement("td");td.textContent=value;tr.append(td);
+          }
+          history.append(tr);
+        }
+        const first=entries.find(entry=>entry.valid);
+        if(first){select.value=first.id;const radio=history.querySelector('input[type="radio"]');if(radio&&!radio.disabled)radio.checked=true;}
       }
       const restore=document.createElement("button");
       restore.type="button";restore.textContent="Ausgewählte Version wiederherstellen";
@@ -56,7 +75,22 @@ async function loadDirectoryHealth(){
         }catch(err){feedback.textContent="Wiederherstellung fehlgeschlagen: "+err.message;}
         finally{restore.disabled=false;}
       });
-      section.append(title,select,restore,feedback);results.append(section);
+      const verify=document.createElement("button");verify.type="button";
+      verify.textContent="Integrität jetzt prüfen";
+      verify.addEventListener("click",async()=>{
+        verify.disabled=true;
+        try{
+          const result=await request("directory-backup-verify",{
+            method:"POST",headers:{"X-Admin-Action":"1"}});
+          showHistory(result.versions);
+          restore.disabled=!result.versions.some(entry=>entry.valid);
+          feedback.textContent="Prüfung: "+result.valid+" gültig, "+result.invalid+
+            " ungültig ("+result.checked_at+").";
+        }catch(err){feedback.textContent="Integritätsprüfung fehlgeschlagen: "+err.message;}
+        finally{verify.disabled=false;}
+      });
+      showHistory(choices);
+      section.append(title,history,restore,verify,feedback);results.append(section);
     }
     summary.textContent="Snapshot: "+(data.updated_at||"nicht vorhanden")+" · Konfiguriert: "+data.configured+
       " · Erfolgreich geparst: "+data.parsed_directories+" · Dauerhaft fehlerhaft: "+(data.persistent_failure_count??0)+" · Im Bericht: "+sources.length;
