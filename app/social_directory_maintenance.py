@@ -205,9 +205,8 @@ def _run_once_locked():
                 db.backup(target)
         if not _valid_backup(temp):
             raise ValueError("Generated SQLite backup failed validation")
-        with _rotation_lock:
-            os.replace(temp, destination)
-            _archive_backup(destination)
+        os.replace(temp, destination)
+        _archive_backup(destination)
         state["last_backup_at"] = datetime.now(timezone.utc).isoformat()
         state["last_error"] = None
         _write_metadata(state)
