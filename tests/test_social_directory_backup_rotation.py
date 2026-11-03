@@ -55,3 +55,21 @@ def test_invalid_retention(monkeypatch, value):
     monkeypatch.setenv("SOCIAL_DIRECTORY_BACKUP_RETENTION_COUNT", value)
     with pytest.raises(ValueError):
         maintenance.retention_count()
+
+
+def test_backup_history_timestamp_and_manual_verification(configured):
+    from datetime import datetime
+    update_review("DE", configured, "resolved", "saved", [configured])
+    assert maintenance.run_once()["status"] == "healthy"
+    versions = maintenance.list_versions()
+    assert len(versions) == 1
+    assert datetime.fromisoformat(versions[0]["created_at"]).tzinfo is not None
+    assert versions[0]["size_bytes"] > 0
+    result = maintenance.verify_versions()
+    assert result["checked"] == 1
+    assert result["valid"] == 1
+    assert result["invalid"] == 0
+    (maintenance.versions_path() / versions[0]["id"]).write_bytes(b"corrupt")
+    result = maintenance.verify_versions()
+    assert result["invalid"] == 1
+    assert result["versions"][0]["valid"] is False
