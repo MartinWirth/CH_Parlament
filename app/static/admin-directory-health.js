@@ -57,7 +57,7 @@ async function loadDirectoryHealth(){
           history.append(tr);
         }
         const first=entries.find(entry=>entry.valid);
-        if(first){select.value=first.id;const radio=history.querySelector('input[type="radio"]');if(radio&&!radio.disabled)radio.checked=true;}
+        if(first){select.value=first.id;const radio=[...history.querySelectorAll('input[type="radio"]')].find(item=>item.value===first.id);if(radio)radio.checked=true;}
       }
       const restore=document.createElement("button");
       restore.type="button";restore.textContent="Ausgewählte Version wiederherstellen";
