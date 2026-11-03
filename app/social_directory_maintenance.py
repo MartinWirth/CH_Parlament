@@ -4,12 +4,17 @@ import logging
 import os
 import sqlite3
 import tempfile
+import re
+import threading
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 from . import social_directory_sqlite as store
 
 logger = logging.getLogger(__name__)
+_rotation_lock = threading.RLock()
+_VERSION_RE = re.compile(r"^[0-9]{8}T[0-9]{6}[0-9]{6}Z-[0-9a-f]{12}\.sqlite3$")
 
 
 def interval_hours():
@@ -70,6 +75,79 @@ def _valid_backup(path):
         return False
 
 
+
+def retention_count():
+    try:
+        count = int(os.getenv("SOCIAL_DIRECTORY_BACKUP_RETENTION_COUNT", "7"))
+    except ValueError:
+        raise ValueError("Invalid backup retention count") from None
+    if not 1 <= count <= 365:
+        raise ValueError("Backup retention count must be between 1 and 365")
+    return count
+
+
+def versions_path():
+    return Path(os.getenv("SOCIAL_DIRECTORY_BACKUP_VERSIONS_DIR",
+                          str(backup_path()) + ".versions"))
+
+
+def list_versions():
+    """Return only safe, validated backup versions, newest first."""
+    directory = versions_path()
+    if not directory.is_dir():
+        return []
+    versions = []
+    for item in sorted(directory.iterdir(), reverse=True):
+        if not _VERSION_RE.fullmatch(item.name) or item.is_symlink() or not item.is_file():
+            continue
+        versions.append({"id": item.name, "valid": _valid_backup(item),
+                         "size_bytes": item.stat().st_size})
+    return versions
+
+
+def _archive_backup(source):
+    """Publish an immutable snapshot, then prune only after success."""
+    if not _valid_backup(source):
+        raise ValueError("Cannot archive invalid SQLite backup")
+    directory = versions_path()
+    directory.mkdir(parents=True, exist_ok=True)
+    name = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + "-" + uuid.uuid4().hex[:12] + ".sqlite3"
+    target = directory / name
+    temp = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=directory, delete=False) as handle:
+            temp = Path(handle.name)
+        with sqlite3.connect(str(source)) as original, sqlite3.connect(str(temp)) as snapshot:
+            original.backup(snapshot)
+        if not _valid_backup(temp):
+            raise ValueError("Archived SQLite backup failed validation")
+        os.replace(temp, target)
+        for item in list_versions()[retention_count():]:
+            (directory / item["id"]).unlink()
+        return name
+    finally:
+        if temp is not None:
+            temp.unlink(missing_ok=True)
+
+
+def restore_version(version_id):
+    """Restore a selected, validated version; preserve the current DB first."""
+    if not isinstance(version_id, str) or not _VERSION_RE.fullmatch(version_id):
+        raise ValueError("Invalid backup version ID")
+    with _rotation_lock:
+        path = versions_path() / version_id
+        if path.is_symlink() or not _valid_backup(path):
+            raise ValueError("Backup version not found or invalid")
+        # Keep a safety snapshot of the current state before destructive restore.
+        if store.database_path().exists():
+            current = backup_path().with_name(backup_path().name + ".pre-restore")
+            store.backup_to(current)
+            if not _valid_backup(current):
+                raise ValueError("Pre-restore safety backup failed")
+        from .social_directory_sqlite import restore_from
+        reviews, audit = restore_from(path)
+        return {"reviews": len(reviews), "events": len(audit), "version": version_id}
+
 def status():
     data = _read_metadata()
     path = backup_path()
@@ -79,7 +157,8 @@ def status():
             "last_check_status": data.get("last_check_status"),
             "last_backup_at": data.get("last_backup_at"),
             "last_error": data.get("last_error"),
-            "backup_valid": _valid_backup(path)}
+            "backup_valid": _valid_backup(path),
+            "versions": len(list_versions()), "retention_count": retention_count()}
 
 
 def run_once():
@@ -103,7 +182,9 @@ def run_once():
                 db.backup(target)
         if not _valid_backup(temp):
             raise ValueError("Generated SQLite backup failed validation")
-        os.replace(temp, destination)
+        with _rotation_lock:
+            os.replace(temp, destination)
+            _archive_backup(destination)
         state["last_backup_at"] = datetime.now(timezone.utc).isoformat()
         state["last_error"] = None
         _write_metadata(state)

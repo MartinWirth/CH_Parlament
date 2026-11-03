@@ -285,6 +285,34 @@ async def admin_directory_review_restore(request: Request):
         raise HTTPException(422, str(exc))
 
 
+@router.get("/directory-backup-versions")
+async def admin_directory_backup_versions(request: Request):
+    _require(request)
+    from .social_directory_review import _sqlite_enabled
+    if not _sqlite_enabled():
+        raise HTTPException(422, "SQLite storage required")
+    from .social_directory_maintenance import list_versions
+    return {"versions": list_versions()}
+
+
+@router.post("/directory-backup-version-restore")
+async def admin_directory_backup_version_restore(request: Request):
+    _require(request)
+    if not _same_origin(request):
+        raise HTTPException(403, "Same-origin request required")
+    from .social_directory_review import _sqlite_enabled
+    if not _sqlite_enabled():
+        raise HTTPException(422, "SQLite storage required")
+    data = await request.json()
+    if not isinstance(data, dict) or set(data) != {"version"} or not isinstance(data["version"], str):
+        raise HTTPException(422, "Invalid backup restore request")
+    from .social_directory_maintenance import restore_version
+    try:
+        return {"ok": True, **restore_version(data["version"])}
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+
+
 @router.post("/directory-source-review")
 async def admin_directory_source_review(request: Request):
     _require(request)
