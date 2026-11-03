@@ -14,7 +14,7 @@ from . import social_directory_sqlite as store
 
 logger = logging.getLogger(__name__)
 _rotation_lock = threading.RLock()
-_VERSION_RE = re.compile(r"^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{12}\.sqlite3$")
+_VERSION_RE = re.compile(r"^[0-9]{8}T[0-9]{6}[0-9]{6}Z-[0-9a-f]{12}\.sqlite3$")
 
 
 def interval_hours():
@@ -97,7 +97,7 @@ def list_versions():
     if not directory.is_dir():
         return []
     versions = []
-    for item in sorted(directory.iterdir(), key=lambda entry: entry.stat().st_mtime_ns, reverse=True):
+    for item in sorted(directory.iterdir(), reverse=True):
         if not _VERSION_RE.fullmatch(item.name) or item.is_symlink() or not item.is_file():
             continue
         versions.append({"id": item.name, "valid": _valid_backup(item),
@@ -111,7 +111,7 @@ def _archive_backup(source):
         raise ValueError("Cannot archive invalid SQLite backup")
     directory = versions_path()
     directory.mkdir(parents=True, exist_ok=True)
-    name = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:12] + ".sqlite3"
+    name = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + "-" + uuid.uuid4().hex[:12] + ".sqlite3"
     target = directory / name
     temp = None
     try:
