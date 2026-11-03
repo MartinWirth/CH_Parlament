@@ -5,7 +5,7 @@ import os
 import sqlite3
 import tempfile
 import re
-import threading
+from contextlib import contextmanager
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,7 +13,25 @@ from pathlib import Path
 from . import social_directory_sqlite as store
 
 logger = logging.getLogger(__name__)
-_rotation_lock = threading.RLock()
+@contextmanager
+def process_lock():
+    """Cross-process exclusive lock backed by SQLite; released on crash."""
+    path = Path(str(store.database_path()) + ".maintenance-lock.sqlite3")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with sqlite3.connect(str(path), timeout=10, isolation_level=None) as lock:
+            lock.execute("PRAGMA busy_timeout=10000")
+            lock.execute("BEGIN IMMEDIATE")
+            try:
+                yield
+            finally:
+                lock.execute("ROLLBACK")
+    except sqlite3.OperationalError as exc:
+        if "locked" in str(exc).lower():
+            raise TimeoutError("Directory maintenance lock timeout") from exc
+        raise
+
+
 _VERSION_RE = re.compile(r"^[0-9]{8}T[0-9]{6}[0-9]{6}Z-[0-9a-f]{12}\.sqlite3$")
 
 
@@ -134,7 +152,7 @@ def restore_version(version_id):
     """Restore a selected, validated version; preserve the current DB first."""
     if not isinstance(version_id, str) or not _VERSION_RE.fullmatch(version_id):
         raise ValueError("Invalid backup version ID")
-    with _rotation_lock:
+    with process_lock():
         path = versions_path() / version_id
         if path.is_symlink() or not _valid_backup(path):
             raise ValueError("Backup version not found or invalid")
@@ -165,6 +183,11 @@ def run_once():
     """Check integrity, then create a verified replacement without destroying prior backup."""
     if not store.database_path().exists():
         return {"status": "empty", **status()}
+    with process_lock():
+        return _run_once_locked()
+
+
+def _run_once_locked():
     state = _read_metadata()
     state["last_check_at"] = datetime.now(timezone.utc).isoformat()
     temp = None
@@ -182,9 +205,8 @@ def run_once():
                 db.backup(target)
         if not _valid_backup(temp):
             raise ValueError("Generated SQLite backup failed validation")
-        with _rotation_lock:
-            os.replace(temp, destination)
-            _archive_backup(destination)
+        os.replace(temp, destination)
+        _archive_backup(destination)
         state["last_backup_at"] = datetime.now(timezone.utc).isoformat()
         state["last_error"] = None
         _write_metadata(state)

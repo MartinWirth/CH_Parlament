@@ -177,7 +177,9 @@ def _storage_lock():
 
 def create_backup():
     if _sqlite_enabled():
-        reviews, audit = _sqlite().backup_to(_sqlite_backup_path())
+        from .social_directory_maintenance import process_lock
+        with process_lock():
+            reviews, audit = _sqlite().backup_to(_sqlite_backup_path())
         return {"reviews": len(reviews), "events": len(audit)}
     with _storage_lock():
         reviews, audit = _load_state()
@@ -187,7 +189,9 @@ def create_backup():
 
 def restore_backup():
     if _sqlite_enabled():
-        reviews, audit = _sqlite().restore_from(_sqlite_backup_path())
+        from .social_directory_maintenance import process_lock
+        with process_lock():
+            reviews, audit = _sqlite().restore_from(_sqlite_backup_path())
         return {"reviews": len(reviews), "events": len(audit)}
     with _storage_lock():
         saved = _load_json(backup_path(), dict)
