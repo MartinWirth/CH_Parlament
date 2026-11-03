@@ -97,7 +97,7 @@ def list_versions():
     if not directory.is_dir():
         return []
     versions = []
-    for item in sorted(directory.iterdir(), reverse=True):
+    for item in sorted(directory.iterdir(), key=lambda entry: entry.stat().st_mtime_ns, reverse=True):
         if not _VERSION_RE.fullmatch(item.name) or item.is_symlink() or not item.is_file():
             continue
         versions.append({"id": item.name, "valid": _valid_backup(item),
