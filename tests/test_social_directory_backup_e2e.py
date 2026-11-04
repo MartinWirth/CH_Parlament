@@ -100,3 +100,18 @@ def test_admin_manual_backup_integrity_check(configured, monkeypatch):
         assert response.status_code == 200
         assert response.json()["valid"] == 1
         assert response.json()["versions"][0]["created_at"]
+
+
+def test_admin_isolated_restore_drill(configured, monkeypatch):
+    monkeypatch.setattr(admin, "_require", lambda request: None)
+    update_review("DE", configured, "resolved", "backup", [configured])
+    assert maintenance.run_once()["status"] == "healthy"
+    update_review("DE", configured, "resolved", "current", [configured])
+    with TestClient(app) as client:
+        assert client.post("/admin/directory-backup-restore-test").status_code == 403
+        response = client.post("/admin/directory-backup-restore-test", headers={
+            "Origin": "http://testserver", "X-Admin-Action": "1"})
+        assert response.status_code == 200
+        assert response.json()["restorable"] == 1
+        assert response.json()["versions"][0]["events"] == 1
+    assert read_reviews()["DE"][configured]["comment"] == "current"
