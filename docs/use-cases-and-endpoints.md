@@ -68,6 +68,7 @@ Alle folgenden Pfade liegen unter `/admin`. `GET /admin` liefert die Login-/Admi
 | POST | `/admin/directory-review-restore` | – | Geschützte Wiederherstellung aus letzter gültiger Sicherung |
 | GET | `/admin/directory-backup-versions` | – | Geschützte Liste der SQLite-Backup-Versionen mit UTC-Erstellungszeit, Dateigrösse und Integrität |
 | POST | `/admin/directory-backup-verify` | – | Authentifizierte manuelle Integritätsprüfung aller Backup-Versionen (Same-Origin und Admin-Action erforderlich) |
+| POST | `/admin/directory-backup-restore-test` | – | Geschützter isolierter Wiederherstellungstest aller SQLite-Backup-Versionen ohne Änderung der Produktivdatenbank |
 | POST | `/admin/directory-backup-version-restore` | JSON `{version}` | Geschützte Wiederherstellung einer ausgewählten SQLite-Version |
 | GET | `/admin/discovery-report` | `language=DE`, `limit=100` (1–500) | Geschützter Bericht über Kandidaten, Fundstellen, Abdeckung und Identitätskonflikte aus dem gespeicherten Snapshot |
 | POST | `/admin/review` | JSON mit exakt `language`, `person_number`, `url`, `decision` | Review-Entscheidung für vorhandenen Kandidaten speichern |
@@ -227,3 +228,7 @@ Automatische Wartung, manuelle SQLite-Sicherungen und Wiederherstellungen (auch 
 ### Backup-Historie und manuelle Integritätsprüfung
 
 Die Admin-Ansicht zeigt pro archivierter SQLite-Version den UTC-Erstellungszeitpunkt, die Grösse in KiB und das Resultat der SQLite-Integritätsprüfung. Der Button „Integrität jetzt prüfen“ ruft `POST /admin/directory-backup-verify` auf und aktualisiert die Liste inklusive Anzahl gültiger und ungültiger Versionen. Die Prüfung ist durch die prozessübergreifende Wartungssperre geschützt, verändert keine Backups und erlaubt weiterhin nur die Wiederherstellung gültiger Versionen. Ein HTTP-503-Fehler zeigt einen Sperr-Timeout an.
+
+### Isolierter Wiederherstellungstest
+
+Der Admin-Button „Wiederherstellbarkeit testen“ ruft `POST /admin/directory-backup-restore-test` auf. Jede archivierte SQLite-Version wird mit der SQLite-Backup-API in eine temporäre Datenbank zurückgespielt. Anschliessend werden `PRAGMA integrity_check`, die vollständigen Reviews und Audit-Datensätze mit dem Backup verglichen. Der Test läuft unter der Wartungssperre, löscht seine temporären Dateien und verändert die produktive Datenbank nicht. Die Antwort enthält pro Version `restorable`, bei Erfolg die Datensatzanzahlen, bei Fehlern eine Fehlermeldung sowie Summen und Prüfzeitpunkt. Beschädigte Backups werden als nicht wiederherstellbar ausgewiesen.
