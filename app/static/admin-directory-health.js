@@ -89,8 +89,23 @@ async function loadDirectoryHealth(){
         }catch(err){feedback.textContent="Integritätsprüfung fehlgeschlagen: "+err.message;}
         finally{verify.disabled=false;}
       });
+      const drill=document.createElement("button");drill.type="button";
+      drill.textContent="Wiederherstellbarkeit testen";
+      drill.addEventListener("click",async()=>{
+        drill.disabled=true;
+        try{
+          const result=await request("directory-backup-restore-test",{
+            method:"POST",headers:{"X-Admin-Action":"1"}});
+          feedback.textContent="Isolierter Restore-Test: "+result.restorable+
+            " wiederherstellbar, "+result.failed+" fehlgeschlagen ("+result.checked_at+").";
+          for(const item of result.versions){
+            if(!item.restorable)feedback.textContent+=" "+item.id+": "+(item.error||"Fehler")+";";
+          }
+        }catch(err){feedback.textContent="Restore-Test fehlgeschlagen: "+err.message;}
+        finally{drill.disabled=false;}
+      });
       showHistory(choices);
-      section.append(title,history,restore,verify,feedback);results.append(section);
+      section.append(title,history,restore,verify,drill,feedback);results.append(section);
     }
     summary.textContent="Snapshot: "+(data.updated_at||"nicht vorhanden")+" · Konfiguriert: "+data.configured+
       " · Erfolgreich geparst: "+data.parsed_directories+" · Dauerhaft fehlerhaft: "+(data.persistent_failure_count??0)+" · Im Bericht: "+sources.length;
