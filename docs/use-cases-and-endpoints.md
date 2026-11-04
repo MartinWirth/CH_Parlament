@@ -66,7 +66,8 @@ Alle folgenden Pfade liegen unter `/admin`. `GET /admin` liefert die Login-/Admi
 | GET | `/admin/directory-storage-health` | – | Geschützter Speicher- und Wiederherstellungsstatus |
 | POST | `/admin/directory-review-backup` | – | Geschützte manuelle Sicherung von Prüfstatus und Audit |
 | POST | `/admin/directory-review-restore` | – | Geschützte Wiederherstellung aus letzter gültiger Sicherung |
-| GET | `/admin/directory-backup-versions` | – | Geschützte Liste der SQLite-Backup-Versionen |
+| GET | `/admin/directory-backup-versions` | – | Geschützte Liste der SQLite-Backup-Versionen mit UTC-Erstellungszeit, Dateigrösse und Integrität |
+| POST | `/admin/directory-backup-verify` | – | Authentifizierte manuelle Integritätsprüfung aller Backup-Versionen (Same-Origin und Admin-Action erforderlich) |
 | POST | `/admin/directory-backup-version-restore` | JSON `{version}` | Geschützte Wiederherstellung einer ausgewählten SQLite-Version |
 | GET | `/admin/discovery-report` | `language=DE`, `limit=100` (1–500) | Geschützter Bericht über Kandidaten, Fundstellen, Abdeckung und Identitätskonflikte aus dem gespeicherten Snapshot |
 | POST | `/admin/review` | JSON mit exakt `language`, `person_number`, `url`, `decision` | Review-Entscheidung für vorhandenen Kandidaten speichern |
@@ -222,3 +223,7 @@ Bei aktivierter periodischer SQLite-Wartung werden verifizierte Sicherungen zus�
 ### Prozessübergreifende SQLite-Wartungssperre (PR #88)
 
 Automatische Wartung, manuelle SQLite-Sicherungen und Wiederherstellungen (auch einer ausgewählten Version) verwenden eine gemeinsame SQLite-basierte exklusive Sperre in `<SOCIAL_DIRECTORY_DB_PATH>.maintenance-lock.sqlite3`. Die Transaktion `BEGIN IMMEDIATE` serialisiert diese Vorgänge über mehrere Prozesse und Worker hinweg; bei Prozessabsturz wird die Sperre automatisch durch SQLite freigegeben. Ein konkurrierender Vorgang wartet höchstens zehn Sekunden und meldet danach einen Timeout. Gewöhnliche Prüfstatus-Schreibvorgänge bleiben über die normale SQLite-Transaktionssteuerung geschützt und werden durch die Wartungssperre nicht zusätzlich serialisiert. API-End-to-End-Tests prüfen die authentifizierten Restore-Routen und Same-Origin-Schutz, ein Multiprocessing-Test die Sperre.
+
+### Backup-Historie und manuelle Integritätsprüfung
+
+Die Admin-Ansicht zeigt pro archivierter SQLite-Version den UTC-Erstellungszeitpunkt, die Grösse in KiB und das Resultat der SQLite-Integritätsprüfung. Der Button „Integrität jetzt prüfen“ ruft `POST /admin/directory-backup-verify` auf und aktualisiert die Liste inklusive Anzahl gültiger und ungültiger Versionen. Die Prüfung ist durch die prozessübergreifende Wartungssperre geschützt, verändert keine Backups und erlaubt weiterhin nur die Wiederherstellung gültiger Versionen. Ein HTTP-503-Fehler zeigt einen Sperr-Timeout an.

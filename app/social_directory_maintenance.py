@@ -119,8 +119,19 @@ def list_versions():
         if not _VERSION_RE.fullmatch(item.name) or item.is_symlink() or not item.is_file():
             continue
         versions.append({"id": item.name, "valid": _valid_backup(item),
-                         "size_bytes": item.stat().st_size})
+                         "size_bytes": item.stat().st_size,
+                         "created_at": datetime.strptime(item.name[:21], "%Y%m%dT%H%M%S%f").replace(tzinfo=timezone.utc).isoformat()})
     return versions
+
+
+def verify_versions():
+    """Recheck all versioned snapshots under the maintenance lock."""
+    with process_lock():
+        versions = list_versions()
+        return {"versions": versions, "checked": len(versions),
+                "valid": sum(item["valid"] for item in versions),
+                "invalid": sum(not item["valid"] for item in versions),
+                "checked_at": datetime.now(timezone.utc).isoformat()}
 
 
 def _archive_backup(source):

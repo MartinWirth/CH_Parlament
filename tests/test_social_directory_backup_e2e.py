@@ -87,3 +87,16 @@ def test_process_lock_serializes_maintenance(configured):
             process.terminate()
             process.join()
     assert process.exitcode == 0
+
+
+def test_admin_manual_backup_integrity_check(configured, monkeypatch):
+    monkeypatch.setattr(admin, "_require", lambda request: None)
+    update_review("DE", configured, "resolved", "saved", [configured])
+    maintenance.run_once()
+    with TestClient(app) as client:
+        assert client.post("/admin/directory-backup-verify").status_code == 403
+        response = client.post("/admin/directory-backup-verify", headers={
+            "Origin": "http://testserver", "X-Admin-Action": "1"})
+        assert response.status_code == 200
+        assert response.json()["valid"] == 1
+        assert response.json()["versions"][0]["created_at"]
