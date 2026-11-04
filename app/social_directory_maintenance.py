@@ -134,6 +134,47 @@ def verify_versions():
                 "checked_at": datetime.now(timezone.utc).isoformat()}
 
 
+
+def test_restore_versions():
+    """Exercise actual SQLite restore into an isolated temporary database.
+
+    Never opens the live database for writing; compares restored data against
+    source rows and checks the restored schema and integrity.
+    """
+    results = []
+    with process_lock():
+        for version in list_versions():
+            item = {"id": version["id"], "restorable": False}
+            source = versions_path() / version["id"]
+            if source.is_symlink() or not version["valid"]:
+                item["error"] = "Invalid backup"
+                results.append(item)
+                continue
+            try:
+                with tempfile.TemporaryDirectory(prefix="directory-restore-drill-") as directory:
+                    target_path = Path(directory) / "restored.sqlite3"
+                    with sqlite3.connect(f"file:{source.resolve().as_posix()}?mode=ro", uri=True) as original:
+                        source_reviews = original.execute("SELECT * FROM reviews ORDER BY language,url").fetchall()
+                        source_audit = original.execute("SELECT * FROM audit ORDER BY id").fetchall()
+                        with sqlite3.connect(str(target_path)) as restored:
+                            original.backup(restored)
+                    with sqlite3.connect(str(target_path)) as restored:
+                        if restored.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                            raise ValueError("Restored SQLite integrity check failed")
+                        if restored.execute("SELECT * FROM reviews ORDER BY language,url").fetchall() != source_reviews:
+                            raise ValueError("Restored reviews do not match source")
+                        if restored.execute("SELECT * FROM audit ORDER BY id").fetchall() != source_audit:
+                            raise ValueError("Restored audit events do not match source")
+                    item.update(restorable=True, reviews=len(source_reviews), events=len(source_audit))
+            except (OSError, sqlite3.Error, ValueError) as exc:
+                item["error"] = str(exc)
+            results.append(item)
+    return {"versions": results, "checked": len(results),
+            "restorable": sum(item["restorable"] for item in results),
+            "failed": sum(not item["restorable"] for item in results),
+            "checked_at": datetime.now(timezone.utc).isoformat()}
+
+
 def _archive_backup(source):
     """Publish an immutable snapshot, then prune only after success."""
     if not _valid_backup(source):
