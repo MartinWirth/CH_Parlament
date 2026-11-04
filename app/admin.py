@@ -310,6 +310,21 @@ async def admin_directory_backup_verify(request: Request):
         raise HTTPException(503, str(exc)) from exc
 
 
+@router.post("/directory-backup-restore-test")
+async def admin_directory_backup_restore_test(request: Request):
+    _require(request)
+    if not _same_origin(request):
+        raise HTTPException(403, "Same-origin request required")
+    from .social_directory_review import _sqlite_enabled
+    if not _sqlite_enabled():
+        raise HTTPException(422, "SQLite storage required")
+    from .social_directory_maintenance import test_restore_versions
+    try:
+        return test_restore_versions()
+    except TimeoutError as exc:
+        raise HTTPException(503, str(exc)) from exc
+
+
 @router.post("/directory-backup-version-restore")
 async def admin_directory_backup_version_restore(request: Request):
     _require(request)

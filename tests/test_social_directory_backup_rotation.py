@@ -73,3 +73,24 @@ def test_backup_history_timestamp_and_manual_verification(configured):
     result = maintenance.verify_versions()
     assert result["invalid"] == 1
     assert result["versions"][0]["valid"] is False
+
+
+def test_restore_drill_preserves_live_database_and_detects_corruption(configured):
+    from app import social_directory_sqlite as store
+    url = configured
+    update_review("DE", url, "resolved", "backup-state", [url])
+    assert maintenance.run_once()["status"] == "healthy"
+    version = maintenance.list_versions()[0]["id"]
+    update_review("DE", url, "resolved", "live-state", [url])
+    before = store.read_state()
+    result = maintenance.test_restore_versions()
+    assert result["checked"] == result["restorable"] == 1
+    assert result["failed"] == 0
+    assert result["versions"][0]["reviews"] == 1
+    assert result["versions"][0]["events"] == 1
+    assert store.read_state() == before
+    (maintenance.versions_path() / version).write_bytes(b"corrupt")
+    result = maintenance.test_restore_versions()
+    assert result["failed"] == 1
+    assert result["versions"][0]["restorable"] is False
+    assert store.read_state() == before
